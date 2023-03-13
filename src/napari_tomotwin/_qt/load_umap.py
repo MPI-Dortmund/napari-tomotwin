@@ -11,8 +11,9 @@ from magicgui import magic_factory, tqdm
 from napari_clusters_plotter._plotter import PlotterWidget
 import pandas as pd
 import numpy as np
+from matplotlib.patches import Circle
 
-
+circle: Circle = None
 class LoadUmapWidget(QWidget):
 
     def __init__(self, napari_viewer: "napari.Viewer"):
@@ -40,8 +41,9 @@ def load_umap_magic(
 ):
     umap = pd.read_pickle(filename)
     if "label" not in umap.keys().tolist():
+        lbls = [int(l+1) for l,_ in enumerate(umap[['umap_1', 'umap_0']].itertuples(index=True, name='Pandas'))]
         label_column = pd.DataFrame(
-            {"label": np.array(range(1, (len(umap) + 1)))}
+            {"label": np.array(lbls)}
         )
         umap = pd.concat([label_column, umap], axis=1)
 
@@ -49,7 +51,8 @@ def load_umap_magic(
         label_layer.properties = umap
     if hasattr(label_layer, "features"):
         label_layer.features = umap
-    label_layer.visible = False
+    label_layer.opacity = 0
+
 
     viewer = napari.current_viewer()
     plotter_widget: PlotterWidget = None
@@ -60,13 +63,27 @@ def load_umap_magic(
     plotter_widget.bin_auto.setChecked(True)
     plotter_widget.plotting_type.setCurrentIndex(1)
     plotter_widget.plot_hide_non_selected.setChecked(True)
-    plotter_widget.show()
     plotter_widget.run(
                 umap,
                 "umap_0",
                 "umap_1",
                 plot_cluster_name=None,
+                force_redraw=True
             )
+
+    @viewer.mouse_drag_callbacks.append
+    def get_event(viewer, event):
+        global circle
+        data_coordinates = label_layer.world_to_data(event.position)
+        val = label_layer._get_value(data_coordinates)
+        umap_coordinates = umap.loc[umap['label']==val,['umap_0','umap_1']]
+
+        center = umap_coordinates.values.tolist()[0]
+        if circle is not None:
+            circle.remove()
+        circle = Circle(tuple(center), 0.5, fill=False, color='r')
+        plotter_widget.graphics_widget.axes.add_patch(circle)
+        plotter_widget.graphics_widget.draw_idle()
 
 
 
@@ -94,7 +111,8 @@ def create_embedding_mask(embeddings: pd.DataFrame):
               'filter': '*.temb'},
 )
 def make_label_mask(
-        filename=pathlib.Path('/some/path.temb')
+        label_layer: "napari.layers.Labels",
+        filename=pathlib.Path('/some/path.tumap')
 ):
     embeddings = pd.read_pickle(filename)
     segmentation_data = create_embedding_mask(embeddings=embeddings)
@@ -104,9 +122,12 @@ def make_label_mask(
 
 
 @magic_factory(
-    img_layer={'label': 'TomoTwin Label Mask:'}
+    call_button="Load",
+    label_layer={'label': 'TomoTwin Label Mask:'},
 )
 def save_clustering(
-        img_layer: "napari.layers.Labels"):
+        label_layer: "napari.layers.Labels"):
 
-    print(f"you have selected {img_layer}")
+    print(f"you have selected {label_layer}")
+    print(label_layer.features)
+    print("HIDDEN?", plotter_widget.isHidden())
