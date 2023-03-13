@@ -1,10 +1,3 @@
-from qtpy.QtCore import Qt, Signal, Slot
-from qtpy.QtWidgets import (
-    QPushButton,
-
-    QVBoxLayout,
-    QWidget,
-)
 import napari
 import pathlib
 from magicgui import magic_factory, tqdm
@@ -14,21 +7,6 @@ import numpy as np
 from matplotlib.patches import Circle
 
 circle: Circle = None
-class LoadUmapWidget(QWidget):
-
-    def __init__(self, napari_viewer: "napari.Viewer"):
-        super().__init__()
-        self.napari_viewer = napari_viewer
-
-        btn = QPushButton("Load umap!")
-        btn.clicked.connect(self._on_click)
-
-        self.setLayout(QVBoxLayout())
-        self.layout().addWidget(btn)
-
-    def _load_umap(self):
-        print("napari has", len(self.viewer.layers), "layers")
-
 @magic_factory(
     call_button="Load",
     label_layer={'label': 'TomoTwin Label Mask:'},
@@ -37,7 +15,7 @@ class LoadUmapWidget(QWidget):
 )
 def load_umap_magic(
         label_layer: "napari.layers.Labels",
-        filename=pathlib.Path('/some/path.tumap')
+        filename: pathlib.Path
 ):
     umap = pd.read_pickle(filename)
     if "label" not in umap.keys().tolist():
@@ -52,7 +30,6 @@ def load_umap_magic(
     if hasattr(label_layer, "features"):
         label_layer.features = umap
     label_layer.opacity = 0
-
 
     viewer = napari.current_viewer()
     plotter_widget: PlotterWidget = None
@@ -78,7 +55,11 @@ def load_umap_magic(
         val = label_layer._get_value(data_coordinates)
         umap_coordinates = umap.loc[umap['label']==val,['umap_0','umap_1']]
 
-        center = umap_coordinates.values.tolist()[0]
+        try:
+            center = umap_coordinates.values.tolist()[0]
+        except IndexError:
+            return
+
         if circle is not None:
             circle.remove()
         circle = Circle(tuple(center), 0.5, fill=False, color='r')
@@ -112,7 +93,7 @@ def create_embedding_mask(embeddings: pd.DataFrame):
 )
 def make_label_mask(
         label_layer: "napari.layers.Labels",
-        filename=pathlib.Path('/some/path.tumap')
+        filename: pathlib.Path
 ):
     embeddings = pd.read_pickle(filename)
     segmentation_data = create_embedding_mask(embeddings=embeddings)
@@ -121,13 +102,3 @@ def make_label_mask(
 
 
 
-@magic_factory(
-    call_button="Load",
-    label_layer={'label': 'TomoTwin Label Mask:'},
-)
-def save_clustering(
-        label_layer: "napari.layers.Labels"):
-
-    print(f"you have selected {label_layer}")
-    print(label_layer.features)
-    print("HIDDEN?", plotter_widget.isHidden())

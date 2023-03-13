@@ -1,0 +1,55 @@
+from magicgui import magic_factory, tqdm
+import pathlib
+import pandas as pd
+import numpy as np
+import os
+
+
+def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame) -> pd.DataFrame:
+    targets = []
+    target_names = []
+    for cluster in set(clusters):
+        if cluster == 0:
+            continue
+        target = embeddings.loc[clusters == cluster, :].astype(np.float32).mean(axis=0)
+        target = target.to_frame().T
+        targets.append(target)
+        target_names.append(f"cluster_{cluster}")
+
+    targets = pd.concat(targets, ignore_index=True)
+    targets["filepath"] = target_names
+    return targets
+
+@magic_factory(
+    call_button="Save",
+    label_layer={'label': 'TomoTwin Label Mask:'},
+    embeddings_filepath={'label': 'Path to embeddings file:',
+              'filter': '*.temb'},
+    output_folder={
+        'label': "Output folder",
+        'mode': 'd'
+    }
+)
+def make_targets(
+        label_layer: "napari.layers.Labels",
+        embeddings_filepath: pathlib.Path,
+        output_folder: pathlib.Path
+):
+    print("Read embeddings")
+    embeddings = pd.read_pickle(embeddings_filepath)
+    embeddings = embeddings.drop(columns=["X", "Y", "Z", "filepath"], errors="ignore")
+
+    print("Read clusters")
+    clusters = label_layer.features['MANUAL_CLUSTER_ID']
+
+    assert len(embeddings) == len(clusters), "Cluster and embedding file are not compatible."
+
+    print("Make targets")
+    targets = _make_targets(embeddings, clusters)
+
+    print("Write targets")
+    os.makedirs(output_folder, exist_ok="True")
+    pth_ref = os.path.join(output_folder, "cluster_targets.temb")
+
+    targets.to_pickle(pth_ref)
+    print("Done")
