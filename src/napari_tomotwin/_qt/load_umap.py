@@ -49,6 +49,7 @@ def load_umap_magic(
         label_layer.properties = umap
     if hasattr(label_layer, "features"):
         label_layer.features = umap
+    label_layer.visible = False
 
     viewer = napari.current_viewer()
     plotter_widget: PlotterWidget = None
