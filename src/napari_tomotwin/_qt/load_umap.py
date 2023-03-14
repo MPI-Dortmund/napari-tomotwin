@@ -68,37 +68,3 @@ def load_umap_magic(
 
 
 
-def create_embedding_mask(embeddings: pd.DataFrame):
-    print("Create embedding mask")
-    embeddings = embeddings.reset_index()
-    Z = embeddings.attrs['tomogram_input_shape'][0]
-    Y = embeddings.attrs['tomogram_input_shape'][1]
-    X = embeddings.attrs['tomogram_input_shape'][2]
-
-    segmentation_array = np.zeros(shape=(Z, Y, X),dtype=np.int64)
-    label = 0
-    for row in tqdm.tqdm(embeddings[['Z', 'Y', 'X']].itertuples(index=True, name='Pandas'), total=len(embeddings)-1):
-        X = int(row.X)
-        Y = int(row.Y)
-        Z = int(row.Z)
-        segmentation_array[(Z):(Z + 2), (Y):(Y + 2), (X):(X + 2)] = label + 1
-        label = label+1
-
-    return segmentation_array
-
-@magic_factory(
-    call_button="Create label mask",
-    filename={'label': 'Path to embeddings file:',
-              'filter': '*.temb'},
-)
-def make_label_mask(
-        label_layer: "napari.layers.Labels",
-        filename: pathlib.Path
-):
-    embeddings = pd.read_pickle(filename)
-    segmentation_data = create_embedding_mask(embeddings=embeddings)
-    viewer = napari.current_viewer()
-    viewer.add_labels(segmentation_data, name='TomoTwin Label Mask')
-
-
-

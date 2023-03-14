@@ -5,16 +5,11 @@ contributions:
     - id: napari-tomotwin.load_umap_magic
       python_name: napari_tomotwin._qt.load_umap:load_umap_magic
       title: TomoTwin Load Umap
-    - id: napari-tomotwin.make_label_mask
-      python_name: napari_tomotwin._qt.load_umap:make_label_mask
-      title: TomoTwin Load Umap
     - id: napari-tomotwin.make_targets
       python_name: napari_tomotwin._qt.make_targets:make_targets
       title: Save targets after clustering
   widgets:
     - command: napari-tomotwin.load_umap_magic
       display_name: Load UMAP embeddings
-    - command: napari-tomotwin.make_label_mask
-      display_name: Make label mask
     - command: napari-tomotwin.make_targets
       display_name: Save targets
