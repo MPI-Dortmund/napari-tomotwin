@@ -10,6 +10,6 @@ contributions:
       title: Save targets after clustering
   widgets:
     - command: napari-tomotwin.load_umap_magic
-      display_name: Load UMAP embeddings
+      display_name: Cluster UMAP embeddings
     - command: napari-tomotwin.make_targets
       display_name: Save targets
