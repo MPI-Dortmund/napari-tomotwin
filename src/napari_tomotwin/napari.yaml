@@ -12,4 +12,4 @@ contributions:
     - command: napari-tomotwin.load_umap_magic
       display_name: Cluster UMAP embeddings
     - command: napari-tomotwin.make_targets
-      display_name: Save targets
+      display_name: Save cluster targets
