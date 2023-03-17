@@ -3,22 +3,25 @@ import pathlib
 import pandas as pd
 import numpy as np
 import os
+from typing import List, Tuple
 
 
-def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame) -> pd.DataFrame:
+def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame) -> Tuple[pd.DataFrame, List[pd.DataFrame]]:
     targets = []
+    sub_embeddings = []
     target_names = []
     for cluster in set(clusters):
         if cluster == 0:
             continue
         target = embeddings.loc[clusters == cluster, :].astype(np.float32).mean(axis=0)
+        sub_embeddings.append(embeddings.loc[clusters == cluster, :])
         target = target.to_frame().T
         targets.append(target)
         target_names.append(f"cluster_{cluster}")
 
     targets = pd.concat(targets, ignore_index=True)
     targets["filepath"] = target_names
-    return targets
+    return targets, sub_embeddings
 
 @magic_factory(
     call_button="Save",
@@ -45,11 +48,17 @@ def make_targets(
     assert len(embeddings) == len(clusters), "Cluster and embedding file are not compatible."
 
     print("Make targets")
-    targets = _make_targets(embeddings, clusters)
+    targets, sub_embeddings = _make_targets(embeddings, clusters)
 
     print("Write targets")
     os.makedirs(output_folder, exist_ok="True")
     pth_ref = os.path.join(output_folder, "cluster_targets.temb")
 
     targets.to_pickle(pth_ref)
+
+    print("Write custer embeddings")
+    for emb_i, emb in enumerate(sub_embeddings):
+        pth_emb = os.path.join(output_folder, f"embeddings_cluster_{emb_i}.temb")
+        emb.to_pickle(pth_emb)
+
     print("Done")

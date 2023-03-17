@@ -40,13 +40,16 @@ def load_umap_magic(
     plotter_widget.bin_auto.setChecked(True)
     plotter_widget.plotting_type.setCurrentIndex(1)
     plotter_widget.plot_hide_non_selected.setChecked(True)
-    plotter_widget.run(
-                umap,
-                "umap_0",
-                "umap_1",
-                plot_cluster_name=None,
-                force_redraw=True
-            )
+    try:
+        plotter_widget.run(
+                    umap,
+                    "umap_0",
+                    "umap_1",
+                    plot_cluster_name=None,
+                    force_redraw=True
+                )
+    except:
+        pass
 
     @viewer.mouse_drag_callbacks.append
     def get_event(viewer, event):
