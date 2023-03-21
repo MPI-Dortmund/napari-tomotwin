@@ -13,7 +13,7 @@ def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame) -> Tuple[pd.
     for cluster in set(clusters):
         if cluster == 0:
             continue
-        target = embeddings.loc[clusters == cluster, :].astype(np.float32).mean(axis=0)
+        target = embeddings.drop(columns=["X", "Y", "Z", "filepath"], errors="ignore").loc[clusters == cluster, :].astype(np.float32).mean(axis=0)
         sub_embeddings.append(embeddings.loc[clusters == cluster, :])
         target = target.to_frame().T
         targets.append(target)
@@ -40,7 +40,6 @@ def make_targets(
 ):
     print("Read embeddings")
     embeddings = pd.read_pickle(embeddings_filepath)
-    embeddings = embeddings.drop(columns=["X", "Y", "Z", "filepath"], errors="ignore")
 
     print("Read clusters")
     clusters = label_layer.features['MANUAL_CLUSTER_ID']
@@ -48,6 +47,8 @@ def make_targets(
     assert len(embeddings) == len(clusters), "Cluster and embedding file are not compatible."
 
     print("Make targets")
+    embeddings = embeddings.reset_index()
+
     targets, sub_embeddings = _make_targets(embeddings, clusters)
 
     print("Write targets")
