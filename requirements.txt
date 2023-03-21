@@ -2,3 +2,5 @@ numpy
 pandas
 napari
 napari-clusters-plotter
+matplotlib
+tqdm
