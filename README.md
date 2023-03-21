@@ -1,6 +1,6 @@
 # napari-tomotwin
 
-[![License Mozilla Public License 2.0](https://img.shields.io/pypi/l/napari-tomotwin.svg?color=green)](https://github.com/thorstenwagner/napari-tomotwin/raw/main/LICENSE)
+[![License Mozilla Public License 2.0](https://img.shields.io/pypi/l/napari-tomotwin.svg?color=green)](https://github.com/MPI-Dortmund/napari-tomotwin/raw/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/napari-tomotwin.svg?color=green)](https://pypi.org/project/napari-tomotwin)
 [![Python Version](https://img.shields.io/pypi/pyversions/napari-tomotwin.svg?color=green)](https://python.org)
 
