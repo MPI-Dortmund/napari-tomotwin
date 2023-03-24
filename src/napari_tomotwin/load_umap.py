@@ -56,7 +56,7 @@ def load_umap_magic(
         global circle
         data_coordinates = label_layer.world_to_data(event.position)
         val = label_layer._get_value(data_coordinates)
-        umap_coordinates = umap.loc[umap['label']==val,['umap_0','umap_1']]
+        umap_coordinates = umap.loc[umap['label']==val,[plotter_widget.plot_x_axis.currentText(),plotter_widget.plot_y_axis.currentText()]]
 
         try:
             center = umap_coordinates.values.tolist()[0]
