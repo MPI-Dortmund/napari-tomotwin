@@ -30,7 +30,7 @@ def load_umap_magic(
     if hasattr(label_layer, "features"):
         label_layer.features = umap
     label_layer.opacity = 0
-
+    label_layer.visible = True
     viewer = napari.current_viewer()
     plotter_widget: PlotterWidget = None
     widget, plotter_widget = viewer.window.add_plugin_dock_widget('napari-clusters-plotter', widget_name='Plotter Widget')
@@ -40,6 +40,7 @@ def load_umap_magic(
     plotter_widget.bin_auto.setChecked(True)
     plotter_widget.plotting_type.setCurrentIndex(1)
     plotter_widget.plot_hide_non_selected.setChecked(True)
+
     try:
         plotter_widget.run(
                     umap,
