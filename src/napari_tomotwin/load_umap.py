@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from matplotlib.patches import Circle
 
+plotter_widget: PlotterWidget = None
 circle: Circle = None
 @magic_factory(
     call_button="Load",
@@ -17,6 +18,7 @@ def load_umap_magic(
         label_layer: "napari.layers.Labels",
         filename: pathlib.Path
 ):
+    global plotter_widget
     umap = pd.read_pickle(filename)
     if "label" not in umap.keys().tolist():
         lbls = [int(l+1) for l,_ in enumerate(umap[['umap_1', 'umap_0']].itertuples(index=True, name='Pandas'))]
@@ -32,7 +34,7 @@ def load_umap_magic(
     label_layer.opacity = 0
     label_layer.visible = True
     viewer = napari.current_viewer()
-    plotter_widget: PlotterWidget = None
+
     widget, plotter_widget = viewer.window.add_plugin_dock_widget('napari-clusters-plotter', widget_name='Plotter Widget')
     plotter_widget.plot_x_axis.setCurrentIndex(1)
     plotter_widget.plot_y_axis.setCurrentIndex(2)
@@ -55,6 +57,8 @@ def load_umap_magic(
     @viewer.mouse_drag_callbacks.append
     def get_event(viewer, event):
         global circle
+        global plotter_widget
+
         label_layer.visible = 1
         data_coordinates = label_layer.world_to_data(event.position)
         val = label_layer._get_value(data_coordinates)
