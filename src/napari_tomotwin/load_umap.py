@@ -1,6 +1,6 @@
 import napari
 import pathlib
-from magicgui import magic_factory, tqdm
+from magicgui import magic_factory
 from napari_clusters_plotter._plotter import PlotterWidget
 import pandas as pd
 import numpy as np
