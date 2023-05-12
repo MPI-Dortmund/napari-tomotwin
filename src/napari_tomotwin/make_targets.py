@@ -1,4 +1,4 @@
-from magicgui import magic_factory, tqdm
+from magicgui import magic_factory
 import pathlib
 import pandas as pd
 import numpy as np
