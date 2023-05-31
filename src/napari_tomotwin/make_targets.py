@@ -1,11 +1,13 @@
-from magicgui import magic_factory
-import pathlib
-import pandas as pd
-import numpy as np
 import os
-import numpy.typing as npt
+import pathlib
 from typing import List, Tuple, Literal, Callable
+
+import numpy as np
+import numpy.typing as npt
+import pandas as pd
+from magicgui import magic_factory
 from scipy.spatial.distance import cdist
+
 
 def _get_medoid_embedding(embeddings: pd.DataFrame, max_embeddings: int = 50000) -> pd.DataFrame:
     """
