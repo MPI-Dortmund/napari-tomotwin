@@ -20,7 +20,7 @@ def _get_medoid_embedding(embeddings: pd.DataFrame, max_embeddings: int = 50000)
         print(f"Your cluster size ({len(embeddings)}) is bigger then {max_embeddings}. Make a random sample to calculate medoid.")
     distance_matrix=cdist(sample,sample,metric='cosine') # its not the cosine similarity, rather a distance (its 0 in case of same embeddings)
     medoid_index = np.argmin(np.sum(distance_matrix,axis=0))
-    return embeddings.iloc[medoid_index,:]
+    return sample.iloc[medoid_index,:]
 
 def _get_avg_embedding(embeddings: pd.DataFrame) -> pd.DataFrame:
     target = embeddings.mean(axis=0)
@@ -28,6 +28,7 @@ def _get_avg_embedding(embeddings: pd.DataFrame) -> pd.DataFrame:
 
 
 def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame, avg_func: Callable[[pd.DataFrame], npt.ArrayLike]) -> Tuple[pd.DataFrame, List[pd.DataFrame]]:
+    print("MEDOID!!!")
     targets = []
     sub_embeddings = []
     target_names = []
