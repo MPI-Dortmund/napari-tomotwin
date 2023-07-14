@@ -8,4 +8,7 @@ dependencies:
   - pandas
   - numpy
   - pyqt
-  - pip
+  - matplotlib
+  - pip:
+    - tqdm
+    - napari-clusters-plotter>=0.7.2
