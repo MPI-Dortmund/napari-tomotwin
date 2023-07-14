@@ -37,7 +37,7 @@ jobs:
       uses: conda-incubator/setup-miniconda@v2
       with:
         mamba-version: "*"
-        activate-environment: tomotwin
+        activate-environment: napari-tomotwin
         channel-priority: true
         python-version: ${{ matrix.python-version }}
         channels: conda-forge, pytorch, nvidia, rapidsai, defaults
