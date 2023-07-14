@@ -76,9 +76,9 @@ def _run(clusters,
     print(target_locations)
     for cluster_id in target_locations:
         df_loc = target_locations[cluster_id]
+        print(df_loc)
         if df_loc is not None and len(df_loc) > 0:
             pth_loc = os.path.join(output_folder, f"cluster_{cluster_id}_medoid.coords")
-            print(pth_loc, df_loc.shape)
             df_loc[["X", "Y", "Z"]].to_csv(pth_loc, sep=" ", header=None, index=None)
 
     print("Write custer embeddings")
