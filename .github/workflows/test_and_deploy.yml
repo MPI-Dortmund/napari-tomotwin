@@ -40,7 +40,7 @@ jobs:
         activate-environment: napari-tomotwin
         channel-priority: true
         python-version: ${{ matrix.python-version }}
-        channels: conda-forge, pytorch, nvidia, rapidsai, defaults
+        channels: conda-forge, defaults
         environment-file: conda_env.yml
     - run: conda --version
     - run: conda init bash
