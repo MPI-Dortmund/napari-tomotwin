@@ -10,8 +10,6 @@ dependencies:
   - pyqt
   - matplotlib
   - scipy
-  - scikit-learn
+  - napari-clusters-plotter
+  - tqdm
   - pip
-  - pip:
-    - tqdm
-    - napari-clusters-plotter>=0.7.2
