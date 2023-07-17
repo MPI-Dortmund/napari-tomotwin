@@ -10,6 +10,7 @@ dependencies:
   - pyqt
   - matplotlib
   - scipy
+  - scikit-learn
   - pip
   - pip:
     - tqdm
