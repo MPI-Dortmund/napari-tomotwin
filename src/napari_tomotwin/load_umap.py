@@ -5,6 +5,7 @@ from napari_clusters_plotter._plotter import PlotterWidget
 import pandas as pd
 import numpy as np
 from matplotlib.patches import Circle
+from napari.utils import notifications
 
 plotter_widget: PlotterWidget = None
 circle: Circle = None
@@ -18,7 +19,15 @@ def load_umap_magic(
         label_layer: "napari.layers.Labels",
         filename: pathlib.Path
 ):
-    global plotter_widget
+    if label_layer == None:
+        notifications.show_error("Label mask is not specificed")
+        return
+
+    if filename.suffix not in ['.tumap']:
+        notifications.show_error("UMAP is not specificed")
+        return
+
+
     umap = pd.read_pickle(filename)
     if "label" not in umap.keys().tolist():
         lbls = [int(l+1) for l,_ in enumerate(umap[['umap_1', 'umap_0']].itertuples(index=True, name='Pandas'))]
