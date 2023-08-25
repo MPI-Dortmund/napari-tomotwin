@@ -13,3 +13,4 @@ dependencies:
   - napari-clusters-plotter
   - tqdm
   - pip
+  - mrcfile
