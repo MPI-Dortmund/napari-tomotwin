@@ -17,7 +17,6 @@ def _draw_circle(data_coordinates, label_layer, umap):
 
     label_layer.visible = 1
 
-    print("cords:", data_coordinates)
     val = label_layer._get_value(data_coordinates)
 
     umap_coordinates = umap.loc[
@@ -37,6 +36,7 @@ def _draw_circle(data_coordinates, label_layer, umap):
 def load_umap(label_layer: "napari.layers.Labels",
         filename: pathlib.Path):
     global umap
+    global plotter_widget
     umap = pd.read_pickle(filename)
     if "label" not in umap.keys().tolist():
         lbls = [int(l + 1) for l, _ in enumerate(umap[['umap_1', 'umap_0']].itertuples(index=True, name='Pandas'))]

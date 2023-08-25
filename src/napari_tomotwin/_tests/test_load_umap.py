@@ -29,12 +29,9 @@ class MyTestCase(unittest.TestCase):
             umap_df.to_pickle(f"{tmpdirname}/umap.tumap")
 
             widget, _ = viewer.window.add_plugin_dock_widget('napari-tomotwin', widget_name='Cluster UMAP embeddings')
-
             load_umap(label_layer=viewer.layers[0], filename=f"{tmpdirname}/umap.tumap")
             _draw_circle((52.60765063119348, 33.616464739122755),viewer.layers[0], lumap.umap)
-
-        self.assertEqual(True, False)  # add assertion here
-
+            assert True # just make sure that now exception is raised
 
 if __name__ == '__main__':
     unittest.main()
