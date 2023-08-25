@@ -22,7 +22,7 @@ class MyTestCase(unittest.TestCase):
 
             with mrcfile.new(f"{tmpdirname}/label_mask.mrci") as mrc:
                 mrc.set_data(rand_volint)
-            viewer.open(plugin='napari',
+            viewer.open(plugin='napari-boxmanager',
                                path=[f"{tmpdirname}/label_mask.mrci"])
 
             umap_df = pd.DataFrame(umap)
