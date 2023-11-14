@@ -7,7 +7,7 @@ import numpy as np
 from matplotlib.patches import Circle
 from napari.utils import notifications
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QGuiApplication
+from qtpy.QtGui import QGuiApplication # pylint: disable=E0611
 from typing import List
 plotter_widget: PlotterWidget = None
 circles: List[Circle] = []
