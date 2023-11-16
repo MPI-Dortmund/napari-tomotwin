@@ -6,13 +6,15 @@ import pandas as pd
 import numpy as np
 from matplotlib.patches import Circle
 from napari.utils import notifications
-
+from qtpy.QtCore import Qt
+from qtpy.QtGui import QGuiApplication # pylint: disable=E0611
+from typing import List
 plotter_widget: PlotterWidget = None
-circle: Circle = None
+circles: List[Circle] = []
 umap: pd.DataFrame
 
 def _draw_circle(data_coordinates, label_layer, umap):
-    global circle
+    global circles
     global plotter_widget
 
     label_layer.visible = 1
@@ -26,10 +28,15 @@ def _draw_circle(data_coordinates, label_layer, umap):
         center = umap_coordinates.values.tolist()[0]
     except IndexError:
         return
-
-    if circle is not None:
-        circle.remove()
+    modifiers = QGuiApplication.keyboardModifiers()
+    if modifiers == Qt.ShiftModifier:
+        pass
+    else:
+        for c in circles[::-1]:
+            c.remove()
+        circles = []
     circle = Circle(tuple(center), 0.5, fill=False, color='r')
+    circles.append(circle)
     plotter_widget.graphics_widget.axes.add_patch(circle)
     plotter_widget.graphics_widget.draw_idle()
 
