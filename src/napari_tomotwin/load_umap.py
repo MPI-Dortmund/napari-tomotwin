@@ -35,7 +35,10 @@ def _draw_circle(data_coordinates, label_layer, umap):
         for c in circles[::-1]:
             c.remove()
         circles = []
-    circle = Circle(tuple(center), 0.5, fill=False, color='r')
+    col = '#40d5aa'
+    if plotter_widget.log_scale.isChecked():
+        col = '#79abfd'
+    circle = Circle(tuple(center), 0.5, fill=False, color=col)
     circles.append(circle)
     plotter_widget.graphics_widget.axes.add_patch(circle)
     plotter_widget.graphics_widget.draw_idle()
