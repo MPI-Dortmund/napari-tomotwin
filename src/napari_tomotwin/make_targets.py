@@ -88,7 +88,7 @@ def _run(clusters,
     print("Write custer embeddings")
     for emb_i, emb in enumerate(sub_embeddings):
         pth_emb = os.path.join(output_folder, f"embeddings_cluster_{emb_i}.temb")
-        emb.to_pickle(pth_emb)
+        emb.to_pickle(pth_emb, index=False)
 
     print("Done")
 
