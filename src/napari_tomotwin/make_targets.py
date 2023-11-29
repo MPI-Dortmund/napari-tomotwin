@@ -8,6 +8,9 @@ import pandas as pd
 from magicgui import magic_factory
 from scipy.spatial.distance import cdist
 
+def get_non_numeric_column_titles(df: pd.DataFrame):
+
+    return [l for l in df.columns if l.isnumeric() == False]
 
 def _get_medoid_embedding(embeddings: pd.DataFrame, max_embeddings: int = 50000) -> Tuple[pd.DataFrame, npt.ArrayLike]:
     """
@@ -18,14 +21,14 @@ def _get_medoid_embedding(embeddings: pd.DataFrame, max_embeddings: int = 50000)
         print(f"Your cluster size ({len(embeddings)}) is bigger then {max_embeddings}. Make a random sample to calculate medoid.")
         embeddings = embeddings.sample(max_embeddings)
 
-    only_emb = embeddings.drop(columns=["X", "Y", "Z", "filepath"], errors="ignore").astype(np.float32)
+    only_emb = embeddings.drop(columns=get_non_numeric_column_titles(embeddings), errors="ignore").astype(np.float32)
     distance_matrix=cdist(only_emb,only_emb,metric='cosine') # its not the cosine similarity, rather a distance (its 0 in case of same embeddings)
     medoid_index = np.argmin(np.sum(distance_matrix,axis=0))
     medoid = only_emb.iloc[medoid_index,:]
     return medoid, embeddings.iloc[[medoid_index]][['X','Y','Z']]
 
 def _get_avg_embedding(embeddings: pd.DataFrame) -> Tuple[pd.DataFrame, npt.ArrayLike]:
-    only_emb = embeddings.drop(columns=["X", "Y", "Z", "filepath"], errors="ignore").astype(np.float32)
+    only_emb = embeddings.drop(columns=get_non_numeric_column_titles(embeddings), errors="ignore").astype(np.float32)
     target = only_emb.mean(axis=0)
     return target, np.array([])
 
