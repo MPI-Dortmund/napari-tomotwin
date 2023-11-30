@@ -18,7 +18,7 @@ class MyTestCase(unittest.TestCase):
             "2": [5, 6, 7],
             "filepath": ["a.mrc","b.mrc","c.mrc"]
         }
-        cluster = np.array([1,1,1])
+        cluster = pd.Series(np.array([1,1,1]))
         with tempfile.TemporaryDirectory() as tmpdirname:
             _run(clusters=cluster,
                  embeddings=pd.DataFrame(fake_embedding),
@@ -47,7 +47,7 @@ class MyTestCase(unittest.TestCase):
             "2": [5, 6, 7, 10, 11, 12],
         }
         fake_embedding['filepath'] = [f"{i}.mrc" for i in range(len(fake_embedding["X"]))]
-        cluster = np.array([1,1,1,2,2,2])
+        cluster = pd.Series(np.array([1,1,1,2,2,2]))
         with tempfile.TemporaryDirectory() as tmpdirname:
             _run(clusters=cluster,
                  embeddings=pd.DataFrame(fake_embedding),
@@ -87,7 +87,7 @@ class MyTestCase(unittest.TestCase):
             "2": [5, 6, 7],
             "filepath": ["a.mrc","b.mrc","c.mrc"]
         }
-        cluster = np.array([1,1,1])
+        cluster = pd.Series(np.array([1,1,1]))
         with tempfile.TemporaryDirectory() as tmpdirname:
             _run(clusters=cluster,
                  embeddings=pd.DataFrame(fake_embedding),
@@ -109,7 +109,7 @@ class MyTestCase(unittest.TestCase):
             "2": [5, 6, 7],
             "filepath": ["a.mrc","b.mrc","c.mrc"]
         }
-        cluster = np.array([1,1,1])
+        cluster = pd.Series(np.array([1,1,1]))
         with tempfile.TemporaryDirectory() as tmpdirname:
             _run(clusters=cluster,
                  embeddings=pd.DataFrame(fake_embedding),
