@@ -1,5 +1,6 @@
 import os
 import pathlib
+import sys
 from typing import List, Tuple, Literal, Callable
 
 import numpy as np
@@ -43,10 +44,11 @@ def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame, avg_func: Ca
     for cluster in set(clusters):
         if cluster == 0:
             continue
-        cluster_embeddings = embeddings.loc[clusters == cluster, :]
+        clmask = (clusters == cluster).to_numpy()
+        cluster_embeddings = embeddings.loc[clmask, :]
         target, position = avg_func(cluster_embeddings)
         target_locations[cluster] = position
-        sub_embeddings.append(embeddings.loc[clusters == cluster, :])
+        sub_embeddings.append(embeddings.loc[clmask, :])
         target = target.to_frame().T
         targets.append(target)
         target_names.append(f"cluster_{cluster}")
@@ -61,15 +63,15 @@ def _run(clusters,
                   output_folder: pathlib.Path,
                   average_method_name: Literal["Average", "Medoid"] = "Medoid",
 ):
-    assert len(embeddings) == len(clusters), "Cluster and embedding file are not compatible."
+    assert len(embeddings) == len(clusters), "Cluster and embedding file are not compatible. They have a different number of embeddings"
 
     avg_method = _get_medoid_embedding
     if average_method_name == "Average":
         avg_method = _get_avg_embedding
 
     print("Make targets")
-    embeddings = embeddings.reset_index()
-
+    #embeddings = embeddings.reset_index()
+    embeddings = embeddings.drop(columns=["level_0","index"], errors="ignore")
     targets, sub_embeddings, target_locations = _make_targets(embeddings, clusters, avg_func=avg_method)
 
     print("Write targets")
