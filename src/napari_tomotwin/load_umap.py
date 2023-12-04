@@ -7,7 +7,7 @@ import numpy as np
 from matplotlib.patches import Circle
 from napari.utils import notifications
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QGuiApplication, QColor # pylint: disable=E0611
+from qtpy.QtGui import QGuiApplication # pylint: disable=E0611
 from typing import List
 from napari.qt.threading import thread_worker
 from magicgui.tqdm import tqdm
