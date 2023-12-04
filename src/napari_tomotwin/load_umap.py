@@ -74,6 +74,7 @@ def show_umap(label_layer):
 
 
     try:
+        # Needs to run in a seperate thread, otherweise it freezes when it is loading the umap
         worker = run_clusters_plotter(plotter_widget,features=umap, plot_x_axis_name="umap_0",plot_y_axis_name="umap_1",plot_cluster_name=None,force_redraw=True)  # create "worker" object
         worker.start()  # start the thread!
     except:
@@ -85,9 +86,6 @@ def _load_umap(filename: pathlib.Path, label_layer):
     global umap
     umap = pd.read_pickle(filename)
     if "label" not in umap.keys().tolist():
-        #lbls = [int(l + 1) for l, _ in enumerate(umap[['umap_1', 'umap_0']].itertuples(index=True, name='Pandas'))]
-        #print(lbls)
-
         lbls = np.arange(1,len(umap)+1,dtype=int)
 
         label_column = pd.DataFrame(
