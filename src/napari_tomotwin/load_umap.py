@@ -71,11 +71,16 @@ def show_umap(label_layer):
     plotter_widget.bin_auto.setChecked(True)
     plotter_widget.plotting_type.setCurrentIndex(1)
     plotter_widget.plot_hide_non_selected.setChecked(True)
+    plotter_widget.setDisabled(True)
+
+    def activate_plotter_widget():
+        plotter_widget.setEnabled(True)
 
 
     try:
         # Needs to run in a seperate thread, otherweise it freezes when it is loading the umap
         worker = run_clusters_plotter(plotter_widget,features=umap, plot_x_axis_name="umap_0",plot_y_axis_name="umap_1",plot_cluster_name=None,force_redraw=True)  # create "worker" object
+        worker.returned.connect(activate_plotter_widget)
         worker.start()  # start the thread!
     except:
         pass
