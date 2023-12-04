@@ -10,6 +10,7 @@ from qtpy.QtCore import Qt
 from qtpy.QtGui import QGuiApplication, QColor # pylint: disable=E0611
 from typing import List
 from pyqtspinner import WaitingSpinner
+from napari.qt.threading import thread_worker
 
 plotter_widget: PlotterWidget = None
 circles: List[Circle] = []
@@ -46,7 +47,6 @@ def _draw_circle(data_coordinates, label_layer, umap):
     plotter_widget.graphics_widget.axes.add_patch(circle)
     plotter_widget.graphics_widget.draw_idle()
 
-from napari.qt.threading import thread_worker
 
 @thread_worker()
 def run_clusters_plotter(plotter_widget,
@@ -115,15 +115,7 @@ def _load_umap(filename: pathlib.Path, label_layer):
         data_coordinates = label_layer.world_to_data(event.position)
         _draw_circle(data_coordinates,label_layer,umap)
 
-def make_spinner():
-    return WaitingSpinner(napari.current_viewer().window._qt_window,
-                             True,
-                             True, Qt.ApplicationModal,
-                             color=QColor(255, 255, 255),
-                             fade=60,
-                             line_width=5,
-                             line_length=15,
-                             )
+
 def stop_spinner():
     spinner.stop()
 
@@ -133,7 +125,7 @@ def load_umap(label_layer: "napari.layers.Labels",
     global plotter_widget
     global spinner
 
-
+    from napari_tomotwin.common import make_spinner
     spinner = make_spinner()
     spinner.start()  # starts spinning
 
