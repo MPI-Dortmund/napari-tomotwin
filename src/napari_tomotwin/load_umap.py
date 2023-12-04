@@ -9,14 +9,12 @@ from napari.utils import notifications
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QGuiApplication, QColor # pylint: disable=E0611
 from typing import List
-from pyqtspinner import WaitingSpinner
 from napari.qt.threading import thread_worker
 from magicgui.tqdm import tqdm
 
 plotter_widget: PlotterWidget = None
 circles: List[Circle] = []
 umap: pd.DataFrame
-spinner: WaitingSpinner
 pbar = None
 
 def _draw_circle(data_coordinates, label_layer, umap):
