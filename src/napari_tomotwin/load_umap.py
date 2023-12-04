@@ -58,11 +58,18 @@ def run_clusters_plotter(plotter_widget,
     plotter_widget.run(features = features, plot_x_axis_name = plot_x_axis_name, plot_y_axis_name = plot_y_axis_name, plot_cluster_name = plot_cluster_name, force_redraw = force_redraw)
 
 def show_umap(label_layer):
-
+    global plotter_widget
     label_layer.opacity = 0
     label_layer.visible = True
 
     viewer = napari.current_viewer()
+
+    @viewer.mouse_drag_callbacks.append
+    def get_event(viewer, event):
+        data_coordinates = label_layer.world_to_data(event.position)
+        _draw_circle(data_coordinates, label_layer, umap)
+
+
     widget, plotter_widget = viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
                                                                   widget_name='Plotter Widget')
 
@@ -110,10 +117,6 @@ def _load_umap(filename: pathlib.Path, label_layer):
 
     return label_layer
 
-    @viewer.mouse_drag_callbacks.append
-    def get_event(viewer, event):
-        data_coordinates = label_layer.world_to_data(event.position)
-        _draw_circle(data_coordinates,label_layer,umap)
 
 
 def stop_spinner():
