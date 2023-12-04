@@ -12,5 +12,7 @@ dependencies:
   - scipy
   - napari-clusters-plotter
   - tqdm
-  - pip
   - mrcfile
+  - pip
+  - pip:
+      - pyqtspinner

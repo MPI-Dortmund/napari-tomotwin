@@ -7,12 +7,14 @@ import numpy as np
 from matplotlib.patches import Circle
 from napari.utils import notifications
 from qtpy.QtCore import Qt
-from qtpy.QtGui import QGuiApplication # pylint: disable=E0611
+from qtpy.QtGui import QGuiApplication, QColor # pylint: disable=E0611
 from typing import List
+from pyqtspinner import WaitingSpinner
 
 plotter_widget: PlotterWidget = None
 circles: List[Circle] = []
 umap: pd.DataFrame
+spinner: WaitingSpinner
 
 def _draw_circle(data_coordinates, label_layer, umap):
     global circles
@@ -81,6 +83,7 @@ def show_umap(label_layer):
         # Needs to run in a seperate thread, otherweise it freezes when it is loading the umap
         worker = run_clusters_plotter(plotter_widget,features=umap, plot_x_axis_name="umap_0",plot_y_axis_name="umap_1",plot_cluster_name=None,force_redraw=True)  # create "worker" object
         worker.returned.connect(activate_plotter_widget)
+        worker.returned.connect(stop_spinner)
         worker.start()  # start the thread!
     except:
         pass
@@ -112,10 +115,27 @@ def _load_umap(filename: pathlib.Path, label_layer):
         data_coordinates = label_layer.world_to_data(event.position)
         _draw_circle(data_coordinates,label_layer,umap)
 
+def make_spinner():
+    return WaitingSpinner(napari.current_viewer().window._qt_window,
+                             True,
+                             True, Qt.ApplicationModal,
+                             color=QColor(255, 255, 255),
+                             fade=60,
+                             line_width=5,
+                             line_length=15,
+                             )
+def stop_spinner():
+    spinner.stop()
+
 def load_umap(label_layer: "napari.layers.Labels",
         filename: pathlib.Path):
     global umap
     global plotter_widget
+    global spinner
+
+
+    spinner = make_spinner()
+    spinner.start()  # starts spinning
 
     worker = _load_umap(filename, label_layer=label_layer)
 
@@ -141,11 +161,8 @@ def load_umap_magic(
         notifications.show_error("UMAP is not specificed")
         return
 
-    load_umap(label_layer, filename)  # create "worker" object
-    #worker.returned.connect(viewer.add_image)  # connect callback functions
-    #worker.start()  # start the thread!
-    #napari.run()
-    #load_umap(label_layer, filename)
+
+    load_umap(label_layer, filename)
 
 
 
