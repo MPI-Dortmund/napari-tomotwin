@@ -11,11 +11,13 @@ from qtpy.QtGui import QGuiApplication, QColor # pylint: disable=E0611
 from typing import List
 from pyqtspinner import WaitingSpinner
 from napari.qt.threading import thread_worker
+from magicgui.tqdm import tqdm
 
 plotter_widget: PlotterWidget = None
 circles: List[Circle] = []
 umap: pd.DataFrame
 spinner: WaitingSpinner
+pbar = None
 
 def _draw_circle(data_coordinates, label_layer, umap):
     global circles
@@ -88,10 +90,12 @@ def show_umap(label_layer):
 
     try:
         # Needs to run in a seperate thread, otherweise it freezes when it is loading the umap
+
         worker = run_clusters_plotter(plotter_widget,features=umap, plot_x_axis_name="umap_0",plot_y_axis_name="umap_1",plot_cluster_name=None,force_redraw=True)  # create "worker" object
         worker.returned.connect(activate_plotter_widget)
-        worker.returned.connect(stop_spinner)
-        worker.start()  # start the thread!
+        worker.finished.connect(lambda: pbar.progressbar.hide())
+        worker.finished.connect(lambda: napari.current_viewer().window._qt_window.setEnabled(True))
+        worker.start()
     except:
         pass
 
@@ -119,22 +123,18 @@ def _load_umap(filename: pathlib.Path, label_layer):
 
 
 
-def stop_spinner():
-    spinner.stop()
-
 def load_umap(label_layer: "napari.layers.Labels",
         filename: pathlib.Path):
     global umap
     global plotter_widget
-    global spinner
+    global pbar
 
-    from napari_tomotwin.common import make_spinner
-    spinner = make_spinner()
-    spinner.start()  # starts spinning
+    pbar = tqdm()
 
+    napari.current_viewer().window._qt_window.setEnabled(False)
     worker = _load_umap(filename, label_layer=label_layer)
-
     worker.returned.connect(show_umap)
+
     worker.start()
 
 

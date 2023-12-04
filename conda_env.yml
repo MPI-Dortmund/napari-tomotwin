@@ -14,5 +14,3 @@ dependencies:
   - tqdm
   - mrcfile
   - pip
-  - pip:
-      - pyqtspinner

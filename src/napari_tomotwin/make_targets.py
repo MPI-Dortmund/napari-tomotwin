@@ -8,8 +8,9 @@ import pandas as pd
 from magicgui import magic_factory
 from scipy.spatial.distance import cdist
 from napari.qt.threading import thread_worker
+from magicgui.tqdm import tqdm
 
-global spinner
+global pbar
 
 def get_non_numeric_column_titles(df: pd.DataFrame):
 
@@ -113,9 +114,6 @@ def _run_worker(embeddings_filepath, label_layer, output_folder: str, average_me
     embeddings = pd.read_pickle(embeddings_filepath)
     _run(clusters, embeddings, output_folder, average_method_name)
 
-def stop_spinner():
-    global spinner
-    spinner.stop()
 
 @magic_factory(
     call_button="Save",
@@ -134,11 +132,9 @@ def make_targets(
         output_folder: pathlib.Path,
         average_method_name: Literal["Average", "Medoid"] = "Medoid",
 ):
-    global spinner
-    from napari_tomotwin.common import make_spinner
-    spinner = make_spinner()
-    spinner.start()  # starts spinning
+    global pbar
+    pbar = tqdm()
     worker = _run_worker(embeddings_filepath, label_layer, output_folder, average_method_name) # create "worker" object
-    worker.returned.connect(stop_spinner)
+    worker.finished.connect(lambda: pbar.progressbar.hide())
     worker.start()
 
