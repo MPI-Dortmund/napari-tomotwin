@@ -53,7 +53,7 @@ def run_clusters_plotter(plotter_widget,
                          plot_y_axis_name,
                          plot_cluster_name,
                          force_redraw):
-    plotter_widget.run(features = umap, plot_x_axis_name = "umap_0", plot_y_axis_name = "umap_1", plot_cluster_name = None, force_redraw = True)
+    plotter_widget.run(features = features, plot_x_axis_name = plot_x_axis_name, plot_y_axis_name = plot_y_axis_name, plot_cluster_name = plot_cluster_name, force_redraw = force_redraw)
 
 def show_umap(label_layer):
 
