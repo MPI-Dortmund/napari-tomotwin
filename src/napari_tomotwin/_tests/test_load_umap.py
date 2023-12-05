@@ -1,11 +1,14 @@
-import unittest
-import napari
-import numpy as np
 import tempfile
+import unittest
+
 import mrcfile
+import napari
 import napari_tomotwin.load_umap as lumap
-from napari_tomotwin.load_umap import load_umap_magic, load_umap, _draw_circle
+import numpy as np
 import pandas as pd
+from napari_tomotwin.load_umap import load_umap, _draw_circle
+
+
 class MyTestCase(unittest.TestCase):
     def test_something(self):
         viewer = napari.Viewer()
