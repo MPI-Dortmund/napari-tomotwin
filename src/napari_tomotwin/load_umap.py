@@ -132,8 +132,8 @@ def load_umap(label_layer: "napari.layers.Labels",
     napari.current_viewer().window._qt_window.setEnabled(False)
     worker = _load_umap(filename, label_layer=label_layer)
     worker.returned.connect(show_umap)
+    return worker
 
-    worker.start()
 
 
 @magic_factory(
@@ -155,7 +155,8 @@ def load_umap_magic(
         return
 
 
-    load_umap(label_layer, filename)
+    worker = load_umap(label_layer, filename)
+    worker.start()
 
 
 

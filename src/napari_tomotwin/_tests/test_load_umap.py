@@ -17,6 +17,7 @@ class MyTestCase(unittest.TestCase):
             "umap_0": np.random.rand(100*100),
             "umap_1": np.random.rand(100 * 100)
         }
+
         print(rand_volint.shape)
         with tempfile.TemporaryDirectory() as tmpdirname:
 
@@ -29,8 +30,13 @@ class MyTestCase(unittest.TestCase):
             umap_df.to_pickle(f"{tmpdirname}/umap.tumap")
 
             widget, _ = viewer.window.add_plugin_dock_widget('napari-tomotwin', widget_name='Cluster UMAP embeddings')
-            load_umap(label_layer=viewer.layers[0], filename=f"{tmpdirname}/umap.tumap")
-            _draw_circle((52.60765063119348, 33.616464739122755),viewer.layers[0], lumap.umap)
+            worker = load_umap(label_layer=viewer.layers[0], filename=f"{tmpdirname}/umap.tumap")
+
+            def draw():
+                _draw_circle((52.60765063119348, 33.616464739122755),viewer.layers[0], lumap.umap)
+
+            worker.returned.connect(_draw_circle)
+            worker.start()
             assert True # just make sure that now exception is raised
 
 if __name__ == '__main__':
