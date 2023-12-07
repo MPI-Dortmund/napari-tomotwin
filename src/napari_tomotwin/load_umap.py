@@ -59,7 +59,7 @@ def run_clusters_plotter(plotter_widget,
 
 def show_umap(label_layer):
     global plotter_widget
-    label_layer.opacity = 0
+    label_layer.opacity = 0.5
     label_layer.visible = True
 
     viewer = napari.current_viewer()
@@ -77,6 +77,7 @@ def show_umap(label_layer):
     plotter_widget.plot_x_axis.setCurrentIndex(1)
     plotter_widget.plot_y_axis.setCurrentIndex(2)
 
+    plotter_widget.layer_select.value = label_layer
     plotter_widget.bin_auto.setChecked(True)
     plotter_widget.plotting_type.setCurrentIndex(1)
     plotter_widget.plot_hide_non_selected.setChecked(True)
@@ -102,8 +103,11 @@ def show_umap(label_layer):
 def _load_umap(filename: pathlib.Path, label_layer):
     global umap
     umap = pd.read_pickle(filename)
+    print(umap.shape, len(umap))
     if "label" not in umap.keys().tolist():
-        lbls = np.arange(1,len(umap)+1,dtype=int)
+        lbls = np.arange(0,len(umap),dtype=int)
+        print(len(lbls))
+        #lbls = [l % 5 for l in lbls]
 
         label_column = pd.DataFrame(
             {"label": lbls}
@@ -115,6 +119,8 @@ def _load_umap(filename: pathlib.Path, label_layer):
         label_layer.properties = umap
     if hasattr(label_layer, "features"):
         label_layer.features = umap
+
+        #label_layer.data = label_layer.data % 1000
 
 
     return label_layer
