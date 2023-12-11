@@ -77,7 +77,12 @@ def show_umap(label_layer):
     plotter_widget.plot_x_axis.setCurrentIndex(1)
     plotter_widget.plot_y_axis.setCurrentIndex(2)
 
-    plotter_widget.layer_select.value = label_layer
+    try:
+        # napari-clusters-plotter > 0.7.4
+        plotter_widget.layer_select.value = label_layer
+    except:
+        # napari-clusters-plotter < 0.7.4
+        pass
     plotter_widget.bin_auto.setChecked(True)
     plotter_widget.plotting_type.setCurrentIndex(1)
     plotter_widget.plot_hide_non_selected.setChecked(True)

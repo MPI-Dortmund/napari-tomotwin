@@ -43,8 +43,6 @@ def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame, avg_func: Ca
     target_locations = {
 
     }
-    print(clusters)
-    print(set(clusters))
     for cluster in set(clusters):
 
         if cluster == 0:
