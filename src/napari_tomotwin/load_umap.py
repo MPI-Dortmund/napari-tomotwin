@@ -2,6 +2,7 @@ import napari
 import pathlib
 from magicgui import magic_factory
 from napari_clusters_plotter._plotter import PlotterWidget
+from napari_clusters_plotter._plotter_utilities import estimate_number_bins
 import pandas as pd
 import numpy as np
 from matplotlib.patches import Circle
@@ -57,12 +58,23 @@ def run_clusters_plotter(plotter_widget,
                          force_redraw):
     plotter_widget.run(features = features, plot_x_axis_name = plot_x_axis_name, plot_y_axis_name = plot_y_axis_name, plot_cluster_name = plot_cluster_name, force_redraw = force_redraw)
 
-def show_umap(label_layer):
+def show_umap(map_and_lbl_data):
+
+
     global plotter_widget
-    label_layer.opacity = 0.5
-    label_layer.visible = True
 
     viewer = napari.current_viewer()
+
+    widget, plotter_widget = viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
+                                                                  widget_name='Plotter Widget',
+                                                                  tabify=False)
+    (umap, lbl_data) = map_and_lbl_data
+
+
+    label_layer = viewer.add_labels(lbl_data, name='Label layer', features=umap,properties=umap)
+
+    label_layer.opacity = 0.5
+    label_layer.visible = False
 
     @viewer.mouse_drag_callbacks.append
     def get_event(viewer, event):
@@ -70,12 +82,14 @@ def show_umap(label_layer):
         _draw_circle(data_coordinates, label_layer, umap)
 
 
-    widget, plotter_widget = viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
-                                                                  widget_name='Plotter Widget')
 
+    def findDataIndex(combo, data):
+        for index in range(combo.count()):
+            print(combo.itemData(index), type(combo.itemData(index)))
+            if combo.itemData(index) == data:
+                return index
+        return -1
 
-    plotter_widget.plot_x_axis.setCurrentIndex(1)
-    plotter_widget.plot_y_axis.setCurrentIndex(2)
 
     try:
         # napari-clusters-plotter > 0.7.4
@@ -83,6 +97,9 @@ def show_umap(label_layer):
     except:
         # napari-clusters-plotter < 0.7.4
         pass
+
+    plotter_widget.plot_x_axis.setCurrentIndex(3)
+    plotter_widget.plot_y_axis.setCurrentIndex(4)
     plotter_widget.bin_auto.setChecked(True)
     plotter_widget.plotting_type.setCurrentIndex(1)
     plotter_widget.plot_hide_non_selected.setChecked(True)
@@ -90,7 +107,6 @@ def show_umap(label_layer):
 
     def activate_plotter_widget():
         plotter_widget.setEnabled(True)
-
 
     try:
         # Needs to run in a seperate thread, otherweise it freezes when it is loading the umap
@@ -100,40 +116,55 @@ def show_umap(label_layer):
         worker.finished.connect(lambda: pbar.progressbar.hide())
         worker.finished.connect(lambda: napari.current_viewer().window._qt_window.setEnabled(True))
         worker.start()
+
     except:
         pass
 
+def create_embedding_mask(umap: pd.DataFrame, values: np.array):
+    """
+    Creates mask where each individual subvolume of the running windows gets an individual ID
+    """
+    print("Create embedding mask")
+    Z = umap.attrs["tomogram_input_shape"][0]
+    Y = umap.attrs["tomogram_input_shape"][1]
+    X = umap.attrs["tomogram_input_shape"][2]
+    stride = umap.attrs["stride"][0]
+    segmentation_array = np.zeros(shape=(Z, Y, X), dtype=np.float32)
+    z = np.array(umap["Z"], dtype=int)
+    y = np.array(umap["Y"], dtype=int)
+    x = np.array(umap["X"], dtype=int)
+
+    #values = np.array(range(1, len(x) + 1))
+    for stride_x in tqdm(list(range(stride))):
+        for stride_y in range(stride):
+            for stride_z in range(stride):
+                index = (z + stride_z, y + stride_y, x + stride_x)
+                segmentation_array[index] = values
+
+    return segmentation_array
+
+def relabel_and_update(umap):
+    print("Relabel")
+    nbins = np.max([estimate_number_bins(umap['umap_0']), estimate_number_bins(umap['umap_1'])])
+    h, xedges, yedges = np.histogram2d(umap['umap_0'], umap['umap_1'], bins=nbins)
+    xbins = np.digitize(umap['umap_0'], xedges)
+    ybins = np.digitize(umap['umap_1'], yedges)
+    new_lbl= xbins*h.shape[0]+ybins
+    if "label" not in umap.keys().tolist():
+        umap['label']= new_lbl
+    return create_embedding_mask(umap,new_lbl).astype(np.int64)
 
 @thread_worker
-def _load_umap(filename: pathlib.Path, label_layer):
+def _load_umap(filename: pathlib.Path):
     global umap
     umap = pd.read_pickle(filename)
-    print(umap.shape, len(umap))
-    if "label" not in umap.keys().tolist():
-        lbls = np.arange(0,len(umap),dtype=int)
-        print(len(lbls))
-        #lbls = [l % 5 for l in lbls]
+    lbl_data = relabel_and_update(umap)
 
-        label_column = pd.DataFrame(
-            {"label": lbls}
-        )
-        umap = pd.concat([label_column, umap], axis=1)
-
-
-    if hasattr(label_layer, "properties"):
-        label_layer.properties = umap
-    if hasattr(label_layer, "features"):
-        label_layer.features = umap
-
-        #label_layer.data = label_layer.data % 1000
-
-
-    return label_layer
+    return umap, lbl_data
 
 
 
-def load_umap(label_layer: "napari.layers.Labels",
-        filename: pathlib.Path):
+def load_umap(filename: pathlib.Path):
     global umap
     global plotter_widget
     global pbar
@@ -141,7 +172,7 @@ def load_umap(label_layer: "napari.layers.Labels",
     pbar = tqdm()
 
     napari.current_viewer().window._qt_window.setEnabled(False)
-    worker = _load_umap(filename, label_layer=label_layer)
+    worker = _load_umap(filename)
     worker.returned.connect(show_umap)
     return worker
 
@@ -149,24 +180,19 @@ def load_umap(label_layer: "napari.layers.Labels",
 
 @magic_factory(
     call_button="Load",
-    label_layer={'label': 'TomoTwin Label Mask:'},
     filename={'label': 'Path to UMAP:',
               'filter': '*.tumap'},
 )
 def load_umap_magic(
-        label_layer: "napari.layers.Labels",
         filename: pathlib.Path
 ):
-    if label_layer == None:
-        notifications.show_error("Label mask is not specificed")
-        return
 
     if filename.suffix not in ['.tumap']:
         notifications.show_error("UMAP is not specificed")
         return
 
 
-    worker = load_umap(label_layer, filename)
+    worker = load_umap(filename)
     worker.start()
 
 
