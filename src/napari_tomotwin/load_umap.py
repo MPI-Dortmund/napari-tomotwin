@@ -13,168 +13,158 @@ from typing import List
 from napari.qt.threading import thread_worker
 from magicgui.tqdm import tqdm
 
-plotter_widget: PlotterWidget = None
-circles: List[Circle] = []
-umap: pd.DataFrame
-pbar = None
 
-def _draw_circle(data_coordinates, label_layer, umap):
-    global circles
-    global plotter_widget
+class LoadUmapTool:
 
-    label_layer.visible = 1
+    def __init__(self):
 
-    val = label_layer._get_value(data_coordinates)
+        self.umap = None
+        self.plotter_widget = None
+        self.pbar = None
+        self.circles: List[Circle] = []
+        self.viewer = napari.current_viewer()
 
-    umap_coordinates = umap.loc[
-        umap['label'] == val, [plotter_widget.plot_x_axis.currentText(), plotter_widget.plot_y_axis.currentText()]]
+    def _draw_circle(self, data_coordinates, label_layer, umap):
+        '''
+        Adds a circle on the umap when you click on the image
+        '''
+        val = label_layer._get_value(data_coordinates)
 
-    try:
-        center = umap_coordinates.values.tolist()[0]
-    except IndexError:
-        return
-    modifiers = QGuiApplication.keyboardModifiers()
-    if modifiers == Qt.ShiftModifier:
-        pass
-    else:
-        for c in circles[::-1]:
-            c.remove()
-        circles = []
-    col = '#40d5aa'
-    if plotter_widget.log_scale.isChecked():
-        col = '#79abfd'
-    circle = Circle(tuple(center), 0.5, fill=False, color=col)
-    circles.append(circle)
-    plotter_widget.graphics_widget.axes.add_patch(circle)
-    plotter_widget.graphics_widget.draw_idle()
+        umap_coordinates = umap.loc[
+            umap['label'] == val, [self.plotter_widget.plot_x_axis.currentText(), self.plotter_widget.plot_y_axis.currentText()]]
 
+        try:
+            center = umap_coordinates.values.tolist()[0]
+        except IndexError:
+            return
+        modifiers = QGuiApplication.keyboardModifiers()
+        if modifiers == Qt.ShiftModifier:
+            pass
+        else:
+            for c in self.circles[::-1]:
+                c.remove()
+            self.circles = []
+        col = '#40d5aa'
+        if self.plotter_widget.log_scale.isChecked():
+            col = '#79abfd'
+        circle = Circle(tuple(center), 0.5, fill=False, color=col)
+        self.circles.append(circle)
+        self.plotter_widget.graphics_widget.axes.add_patch(circle)
+        self.plotter_widget.graphics_widget.draw_idle()
 
-@thread_worker()
-def run_clusters_plotter(plotter_widget,
-                         features,
-                         plot_x_axis_name,
-                         plot_y_axis_name,
-                         plot_cluster_name,
-                         force_redraw):
-    plotter_widget.run(features = features, plot_x_axis_name = plot_x_axis_name, plot_y_axis_name = plot_y_axis_name, plot_cluster_name = plot_cluster_name, force_redraw = force_redraw)
-
-def show_umap(map_and_lbl_data):
-
-
-    global plotter_widget
-
-    viewer = napari.current_viewer()
-
-    widget, plotter_widget = viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
-                                                                  widget_name='Plotter Widget',
-                                                                  tabify=False)
-    (umap, lbl_data) = map_and_lbl_data
+    @thread_worker()
+    def run_clusters_plotter(self, plotter_widget,
+                             features,
+                             plot_x_axis_name,
+                             plot_y_axis_name,
+                             plot_cluster_name,
+                             force_redraw):
+        '''
+        Wrapper function to run clusters plotter in a seperate thead.
+        '''
+        plotter_widget.run(features=features, plot_x_axis_name=plot_x_axis_name, plot_y_axis_name=plot_y_axis_name,
+                           plot_cluster_name=plot_cluster_name, force_redraw=force_redraw)
 
 
-    label_layer = viewer.add_labels(lbl_data, name='Label layer', features=umap,properties=umap)
-
-    label_layer.opacity = 0.5
-    label_layer.visible = False
-
-    @viewer.mouse_drag_callbacks.append
-    def get_event(viewer, event):
-        data_coordinates = label_layer.world_to_data(event.position)
-        _draw_circle(data_coordinates, label_layer, umap)
+    def show_umap(self, lbl_data):
 
 
+        widget, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
+                                                                      widget_name='Plotter Widget',
+                                                                      tabify=True)
 
-    def findDataIndex(combo, data):
-        for index in range(combo.count()):
-            print(combo.itemData(index), type(combo.itemData(index)))
-            if combo.itemData(index) == data:
-                return index
-        return -1
+        label_layer = self.viewer.add_labels(lbl_data, name='Label layer', features=self.umap, properties=self.umap)
 
+        label_layer.opacity = 0.5
+        label_layer.visible = False
 
-    try:
-        # napari-clusters-plotter > 0.7.4
-        plotter_widget.layer_select.value = label_layer
-    except:
-        # napari-clusters-plotter < 0.7.4
-        pass
+        @self.viewer.mouse_drag_callbacks.append
+        def get_event(viewer, event):
+            data_coordinates = label_layer.world_to_data(event.position)
+            self._draw_circle(data_coordinates, label_layer, self.umap)
 
-    plotter_widget.plot_x_axis.setCurrentIndex(3)
-    plotter_widget.plot_y_axis.setCurrentIndex(4)
-    plotter_widget.bin_auto.setChecked(True)
-    plotter_widget.plotting_type.setCurrentIndex(1)
-    plotter_widget.plot_hide_non_selected.setChecked(True)
-    plotter_widget.setDisabled(True)
+        try:
+            # napari-clusters-plotter > 0.7.4
+            self.plotter_widget.layer_select.value = label_layer
+        except:
+            # napari-clusters-plotter < 0.7.4
+            pass
 
-    def activate_plotter_widget():
-        plotter_widget.setEnabled(True)
+        self.plotter_widget.plot_x_axis.setCurrentIndex(3)
+        self.plotter_widget.plot_y_axis.setCurrentIndex(4)
+        self.plotter_widget.bin_auto.setChecked(True)
+        self.plotter_widget.plotting_type.setCurrentIndex(1)
+        self.plotter_widget.plot_hide_non_selected.setChecked(True)
+        self.plotter_widget.setDisabled(True)
 
-    try:
-        # Needs to run in a seperate thread, otherweise it freezes when it is loading the umap
+        def activate_plotter_widget():
+            self.plotter_widget.setEnabled(True)
 
-        worker = run_clusters_plotter(plotter_widget,features=umap, plot_x_axis_name="umap_0",plot_y_axis_name="umap_1",plot_cluster_name=None,force_redraw=True)  # create "worker" object
-        worker.returned.connect(activate_plotter_widget)
-        worker.finished.connect(lambda: pbar.progressbar.hide())
-        worker.finished.connect(lambda: napari.current_viewer().window._qt_window.setEnabled(True))
-        worker.start()
+        try:
+            # Needs to run in a seperate thread, otherweise it freezes when it is loading the umap
 
-    except:
-        pass
+            worker = self.run_clusters_plotter(self.plotter_widget, features=self.umap, plot_x_axis_name="umap_0",
+                                          plot_y_axis_name="umap_1", plot_cluster_name=None,
+                                          force_redraw=True)  # create "worker" object
+            worker.returned.connect(activate_plotter_widget)
+            worker.finished.connect(lambda: self.pbar.progressbar.hide())
+            worker.finished.connect(lambda: napari.current_viewer().window._qt_window.setEnabled(True))
+            worker.start()
 
-def create_embedding_mask(umap: pd.DataFrame, values: np.array):
-    """
-    Creates mask where each individual subvolume of the running windows gets an individual ID
-    """
-    print("Create embedding mask")
-    Z = umap.attrs["tomogram_input_shape"][0]
-    Y = umap.attrs["tomogram_input_shape"][1]
-    X = umap.attrs["tomogram_input_shape"][2]
-    stride = umap.attrs["stride"][0]
-    segmentation_array = np.zeros(shape=(Z, Y, X), dtype=np.float32)
-    z = np.array(umap["Z"], dtype=int)
-    y = np.array(umap["Y"], dtype=int)
-    x = np.array(umap["X"], dtype=int)
+        except:
+            pass
 
-    #values = np.array(range(1, len(x) + 1))
-    for stride_x in tqdm(list(range(stride))):
-        for stride_y in range(stride):
-            for stride_z in range(stride):
-                index = (z + stride_z, y + stride_y, x + stride_x)
-                segmentation_array[index] = values
+    def create_embedding_mask(self, umap: pd.DataFrame, values: np.array):
+        """
+        Creates mask where each individual subvolume of the running windows gets an individual ID
+        """
+        print("Create embedding mask")
+        Z = umap.attrs["tomogram_input_shape"][0]
+        Y = umap.attrs["tomogram_input_shape"][1]
+        X = umap.attrs["tomogram_input_shape"][2]
+        stride = umap.attrs["stride"][0]
+        segmentation_array = np.zeros(shape=(Z, Y, X), dtype=np.float32)
+        z = np.array(umap["Z"], dtype=int)
+        y = np.array(umap["Y"], dtype=int)
+        x = np.array(umap["X"], dtype=int)
 
-    return segmentation_array
+        # values = np.array(range(1, len(x) + 1))
+        for stride_x in tqdm(list(range(stride))):
+            for stride_y in range(stride):
+                for stride_z in range(stride):
+                    index = (z + stride_z, y + stride_y, x + stride_x)
+                    segmentation_array[index] = values
 
-def relabel_and_update(umap):
-    print("Relabel")
-    nbins = np.max([estimate_number_bins(umap['umap_0']), estimate_number_bins(umap['umap_1'])])
-    h, xedges, yedges = np.histogram2d(umap['umap_0'], umap['umap_1'], bins=nbins)
-    xbins = np.digitize(umap['umap_0'], xedges)
-    ybins = np.digitize(umap['umap_1'], yedges)
-    new_lbl= xbins*h.shape[0]+ybins
-    if "label" not in umap.keys().tolist():
-        umap['label']= new_lbl
-    return create_embedding_mask(umap,new_lbl).astype(np.int64)
+        return segmentation_array
 
-@thread_worker
-def _load_umap(filename: pathlib.Path):
-    global umap
-    umap = pd.read_pickle(filename)
-    lbl_data = relabel_and_update(umap)
+    def relabel_and_update(self):
+        '''
+        Here I reduce the number of labels according the histogram bins. This is only for speed reasons.
+        '''
+        print("Relabel")
+        nbins = np.max([estimate_number_bins(self.umap['umap_0']), estimate_number_bins(self.umap['umap_1'])])
+        h, xedges, yedges = np.histogram2d(self.umap['umap_0'], self.umap['umap_1'], bins=nbins)
+        xbins = np.digitize(self.umap['umap_0'], xedges)
+        ybins = np.digitize(self.umap['umap_1'], yedges)
+        new_lbl = xbins * h.shape[0] + ybins
+        if "label" not in self.umap.keys().tolist():
+            self.umap['label'] = new_lbl
+        lbl_data = self.create_embedding_mask(self.umap, new_lbl).astype(np.int64)
+        return lbl_data
 
-    return umap, lbl_data
+    @thread_worker
+    def _load_umap(self, filename: pathlib.Path):
+        self.umap = pd.read_pickle(filename)
+        lbl_data = self.relabel_and_update()
 
+        return lbl_data
+    def load_umap(self, filename: pathlib.Path):
+        self.pbar = tqdm()
 
-
-def load_umap(filename: pathlib.Path):
-    global umap
-    global plotter_widget
-    global pbar
-
-    pbar = tqdm()
-
-    napari.current_viewer().window._qt_window.setEnabled(False)
-    worker = _load_umap(filename)
-    worker.returned.connect(show_umap)
-    return worker
+        napari.current_viewer().window._qt_window.setEnabled(False)
+        worker = self._load_umap(filename)
+        worker.returned.connect(self.show_umap)
+        return worker
 
 
 
@@ -191,8 +181,8 @@ def load_umap_magic(
         notifications.show_error("UMAP is not specificed")
         return
 
-
-    worker = load_umap(filename)
+    tool = LoadUmapTool()
+    worker = tool.load_umap(filename)
     worker.start()
 
 
