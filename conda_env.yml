@@ -10,6 +10,7 @@ dependencies:
   - pyqt
   - matplotlib
   - scipy
+  - scikit-learn
   - napari-clusters-plotter
   - tqdm
   - mrcfile
