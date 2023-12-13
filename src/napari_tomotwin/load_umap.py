@@ -9,9 +9,13 @@ from napari.utils import notifications
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QGuiApplication # pylint: disable=E0611
 from typing import List
+from napari.qt.threading import thread_worker
+from magicgui.tqdm import tqdm
+
 plotter_widget: PlotterWidget = None
 circles: List[Circle] = []
 umap: pd.DataFrame
+pbar = None
 
 def _draw_circle(data_coordinates, label_layer, umap):
     global circles
@@ -43,50 +47,94 @@ def _draw_circle(data_coordinates, label_layer, umap):
     plotter_widget.graphics_widget.axes.add_patch(circle)
     plotter_widget.graphics_widget.draw_idle()
 
-def load_umap(label_layer: "napari.layers.Labels",
-        filename: pathlib.Path):
-    global umap
-    global plotter_widget
-    umap = pd.read_pickle(filename)
-    if "label" not in umap.keys().tolist():
-        lbls = [int(l + 1) for l, _ in enumerate(umap[['umap_1', 'umap_0']].itertuples(index=True, name='Pandas'))]
-        label_column = pd.DataFrame(
-            {"label": np.array(lbls)}
-        )
-        umap = pd.concat([label_column, umap], axis=1)
 
-    if hasattr(label_layer, "properties"):
-        label_layer.properties = umap
-    if hasattr(label_layer, "features"):
-        label_layer.features = umap
+@thread_worker()
+def run_clusters_plotter(plotter_widget,
+                         features,
+                         plot_x_axis_name,
+                         plot_y_axis_name,
+                         plot_cluster_name,
+                         force_redraw):
+    plotter_widget.run(features = features, plot_x_axis_name = plot_x_axis_name, plot_y_axis_name = plot_y_axis_name, plot_cluster_name = plot_cluster_name, force_redraw = force_redraw)
+
+def show_umap(label_layer):
+    global plotter_widget
     label_layer.opacity = 0
     label_layer.visible = True
+
     viewer = napari.current_viewer()
+
+    @viewer.mouse_drag_callbacks.append
+    def get_event(viewer, event):
+        data_coordinates = label_layer.world_to_data(event.position)
+        _draw_circle(data_coordinates, label_layer, umap)
+
 
     widget, plotter_widget = viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
                                                                   widget_name='Plotter Widget')
+
+
     plotter_widget.plot_x_axis.setCurrentIndex(1)
     plotter_widget.plot_y_axis.setCurrentIndex(2)
 
     plotter_widget.bin_auto.setChecked(True)
     plotter_widget.plotting_type.setCurrentIndex(1)
     plotter_widget.plot_hide_non_selected.setChecked(True)
+    plotter_widget.setDisabled(True)
+
+    def activate_plotter_widget():
+        plotter_widget.setEnabled(True)
+
 
     try:
-        plotter_widget.run(
-            umap,
-            "umap_0",
-            "umap_1",
-            plot_cluster_name=None,
-            force_redraw=True
-        )
+        # Needs to run in a seperate thread, otherweise it freezes when it is loading the umap
+
+        worker = run_clusters_plotter(plotter_widget,features=umap, plot_x_axis_name="umap_0",plot_y_axis_name="umap_1",plot_cluster_name=None,force_redraw=True)  # create "worker" object
+        worker.returned.connect(activate_plotter_widget)
+        worker.finished.connect(lambda: pbar.progressbar.hide())
+        worker.finished.connect(lambda: napari.current_viewer().window._qt_window.setEnabled(True))
+        worker.start()
     except:
         pass
 
-    @viewer.mouse_drag_callbacks.append
-    def get_event(viewer, event):
-        data_coordinates = label_layer.world_to_data(event.position)
-        _draw_circle(data_coordinates,label_layer,umap)
+
+@thread_worker
+def _load_umap(filename: pathlib.Path, label_layer):
+    global umap
+    umap = pd.read_pickle(filename)
+    if "label" not in umap.keys().tolist():
+        lbls = np.arange(1,len(umap)+1,dtype=int)
+
+        label_column = pd.DataFrame(
+            {"label": lbls}
+        )
+        umap = pd.concat([label_column, umap], axis=1)
+
+
+    if hasattr(label_layer, "properties"):
+        label_layer.properties = umap
+    if hasattr(label_layer, "features"):
+        label_layer.features = umap
+
+
+    return label_layer
+
+
+
+def load_umap(label_layer: "napari.layers.Labels",
+        filename: pathlib.Path):
+    global umap
+    global plotter_widget
+    global pbar
+
+    pbar = tqdm()
+
+    napari.current_viewer().window._qt_window.setEnabled(False)
+    worker = _load_umap(filename, label_layer=label_layer)
+    worker.returned.connect(show_umap)
+    return worker
+
+
 
 @magic_factory(
     call_button="Load",
@@ -106,7 +154,9 @@ def load_umap_magic(
         notifications.show_error("UMAP is not specificed")
         return
 
-    load_umap(label_layer, filename)
+
+    worker = load_umap(label_layer, filename)
+    worker.start()
 
 
 

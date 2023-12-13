@@ -1,6 +1,5 @@
 import os
 import pathlib
-import sys
 from typing import List, Tuple, Literal, Callable
 
 import numpy as np
@@ -8,6 +7,10 @@ import numpy.typing as npt
 import pandas as pd
 from magicgui import magic_factory
 from scipy.spatial.distance import cdist
+from napari.qt.threading import thread_worker
+from magicgui.tqdm import tqdm
+
+global pbar
 
 def get_non_numeric_column_titles(df: pd.DataFrame):
 
@@ -32,7 +35,6 @@ def _get_avg_embedding(embeddings: pd.DataFrame) -> Tuple[pd.DataFrame, npt.Arra
     only_emb = embeddings.drop(columns=get_non_numeric_column_titles(embeddings), errors="ignore").astype(np.float32)
     target = only_emb.mean(axis=0)
     return target, np.array([])
-
 
 def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame, avg_func: Callable[[pd.DataFrame], npt.ArrayLike]) -> Tuple[pd.DataFrame, List[pd.DataFrame], dict]:
     targets = []
@@ -62,6 +64,7 @@ def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame, avg_func: Ca
     return targets, sub_embeddings, target_locations
 
 
+
 def _run(clusters,
                   embeddings: pd.DataFrame,
                   output_folder: pathlib.Path,
@@ -73,9 +76,12 @@ def _run(clusters,
     if average_method_name == "Average":
         avg_method = _get_avg_embedding
 
+
+
     print("Make targets")
     #embeddings = embeddings.reset_index()
     embeddings = embeddings.drop(columns=["level_0","index"], errors="ignore")
+
     targets, sub_embeddings, target_locations = _make_targets(embeddings, clusters, avg_func=avg_method)
 
     print("Write targets")
@@ -98,6 +104,17 @@ def _run(clusters,
 
     print("Done")
 
+
+@thread_worker
+def _run_worker(embeddings_filepath, label_layer, output_folder: str, average_method_name: str):
+    print("Read clusters")
+    clusters = label_layer.features['MANUAL_CLUSTER_ID']
+
+    print("Read embeddings")
+    embeddings = pd.read_pickle(embeddings_filepath)
+    _run(clusters, embeddings, output_folder, average_method_name)
+
+
 @magic_factory(
     call_button="Save",
     label_layer={'label': 'TomoTwin Label Mask:'},
@@ -115,11 +132,9 @@ def make_targets(
         output_folder: pathlib.Path,
         average_method_name: Literal["Average", "Medoid"] = "Medoid",
 ):
+    global pbar
+    pbar = tqdm()
+    worker = _run_worker(embeddings_filepath, label_layer, output_folder, average_method_name) # create "worker" object
+    worker.finished.connect(lambda: pbar.progressbar.hide())
+    worker.start()
 
-    print("Read clusters")
-    clusters = label_layer.features['MANUAL_CLUSTER_ID']
-
-    print("Read embeddings")
-    embeddings = pd.read_pickle(embeddings_filepath)
-
-    _run(clusters, embeddings, output_folder, average_method_name)
