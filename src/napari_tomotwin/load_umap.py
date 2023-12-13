@@ -166,6 +166,8 @@ class LoadUmapTool:
         from napari.layers import Layer
         lbl_layer = Layer.create(lbl_data, {
             "name": "Label layer"}, layer_type="Labels")
+        lbl_layer.features = self.umap
+        lbl_layer.properties = self.umap
 
         return lbl_layer
     def load_umap(self, filename: pathlib.Path):
