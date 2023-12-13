@@ -152,16 +152,18 @@ class LoadUmapTool:
         lbl_data = self.create_embedding_mask(self.umap, new_lbl).astype(np.int64)
         return lbl_data
 
-    @thread_worker
-    def _load_umap(self, filename: pathlib.Path):
-        self.pbar.progressbar.label = "Read umap"
+    def load_umap(self, filename: pathlib.Path):
+        if self.pbar is not None:
+            self.pbar.progressbar.label = "Read umap"
         self.umap = pd.read_pickle(filename)
         if 'tomogram_input_shape' not in self.umap.attrs:
-            napari.utils.notifications.show_error("The umap was calculated with an old version of TomoTwin. Please update TomoTwin and re-estimate the umap.")
+            napari.utils.notifications.show_error(
+                "The umap was calculated with an old version of TomoTwin. Please update TomoTwin and re-estimate the umap.")
             self.pbar.progressbar.hide()
             import sys
             sys.exit(1)
-        self.pbar.progressbar.label = "Generate label layer"
+        if self.pbar is not None:
+            self.pbar.progressbar.label = "Generate label layer"
         lbl_data = self.relabel_and_update()
         from napari.layers import Layer
         lbl_layer = Layer.create(lbl_data, {
@@ -170,11 +172,16 @@ class LoadUmapTool:
         lbl_layer.properties = self.umap
 
         return lbl_layer
-    def load_umap(self, filename: pathlib.Path):
+
+    @thread_worker
+    def _load_umap_worker(self, filename: pathlib.Path):
+        return self.load_umap(filename)
+
+    def start_umap_worker(self, filename: pathlib.Path):
         self.pbar = tqdm()
 
         napari.current_viewer().window._qt_window.setEnabled(False)
-        worker = self._load_umap(filename)
+        worker = self._load_umap_worker(filename)
         worker.returned.connect(self.show_umap)
 
         return worker
@@ -197,7 +204,7 @@ def load_umap_magic(
         notifications.show_error("UMAP is not specificed")
         return
     tool = LoadUmapTool()
-    worker = tool.load_umap(filename)
+    worker = tool.start_umap_worker(filename)
     worker.start()
 
 

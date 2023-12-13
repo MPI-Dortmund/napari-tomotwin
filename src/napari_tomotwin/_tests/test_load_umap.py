@@ -6,40 +6,43 @@ import napari
 import napari_tomotwin.load_umap as lumap
 import numpy as np
 import pandas as pd
-from napari_tomotwin.load_umap import load_umap, _draw_circle
+from napari_tomotwin.load_umap import LoadUmapTool
 
 
 class MyTestCase(unittest.TestCase):
     def test_something(self):
         viewer = napari.Viewer()
-
+        tool = LoadUmapTool()
 
         rand_volint = np.arange(0,100*100).reshape(100,100).astype(np.float32)
 
         umap = {
+            "X": np.random.randint(0,100,size=100*100),
+            "Y": np.random.randint(0,100,size=100 * 100),
+            "Z": np.random.randint(0,100,size=100 * 100),
             "umap_0": np.random.rand(100*100),
             "umap_1": np.random.rand(100 * 100)
         }
+
+
 
         print(rand_volint.shape)
         with tempfile.TemporaryDirectory() as tmpdirname:
 
             with mrcfile.new(f"{tmpdirname}/label_mask.mrci") as mrc:
                 mrc.set_data(rand_volint)
-            viewer.open(plugin='napari-boxmanager',
-                               path=[f"{tmpdirname}/label_mask.mrci"])
+            #viewer.open(plugin='napari-boxmanager',
+            #                   path=[f"{tmpdirname}/label_mask.mrci"])
 
             umap_df = pd.DataFrame(umap)
+            umap_df.attrs['tomogram_input_shape'] = (100, 100, 100)
+            umap_df.attrs["stride"] = (1,1,1)
             umap_df.to_pickle(f"{tmpdirname}/umap.tumap")
 
             widget, _ = viewer.window.add_plugin_dock_widget('napari-tomotwin', widget_name='Cluster UMAP embeddings')
-            worker = load_umap(label_layer=viewer.layers[0], filename=f"{tmpdirname}/umap.tumap")
+            lyr = tool.load_umap(filename=f"{tmpdirname}/umap.tumap")
+            viewer.add_layer(lyr)
 
-            def draw():
-                _draw_circle((52.60765063119348, 33.616464739122755),viewer.layers[0], lumap.umap)
-
-            worker.returned.connect(_draw_circle)
-            worker.start()
             assert True # just make sure that now exception is raised
 
 if __name__ == '__main__':
