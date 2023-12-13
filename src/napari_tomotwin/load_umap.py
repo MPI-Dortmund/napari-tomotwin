@@ -159,7 +159,8 @@ class LoadUmapTool:
         if 'tomogram_input_shape' not in self.umap.attrs['embeddings_attrs']:
             napari.utils.notifications.show_error(
                 "The umap was calculated with an old version of TomoTwin. Please update TomoTwin and re-estimate the umap.")
-            self.pbar.progressbar.hide()
+            if self.pbar is not None:
+                self.pbar.progressbar.hide()
             import sys
             sys.exit(1)
         if self.pbar is not None:
