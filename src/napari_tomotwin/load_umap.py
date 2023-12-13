@@ -67,7 +67,7 @@ class LoadUmapTool:
 
 
     def show_umap(self, label_layer):
-
+        self.pbar.progressbar.label = "Visualize umap"
         self.viewer.add_layer(label_layer)
         widget, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
                                                                       widget_name='Plotter Widget',
@@ -154,7 +154,9 @@ class LoadUmapTool:
 
     @thread_worker
     def _load_umap(self, filename: pathlib.Path):
+        self.pbar.progressbar.label = "Read umap"
         self.umap = pd.read_pickle(filename)
+        self.pbar.progressbar.label = "Generate label layer"
         lbl_data = self.relabel_and_update()
         from napari.layers import Layer
         lbl_layer = Layer.create(lbl_data, {
