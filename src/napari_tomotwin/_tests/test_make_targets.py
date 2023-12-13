@@ -43,8 +43,8 @@ class MyTestCase(unittest.TestCase):
             "X": [0, 1, 2, 8, 9, 10],
             "Y": [0, 1, 2, 8, 9, 10],
             "Z": [0, 1, 2, 8, 9, 10],
-            "1": [5, 6, 7, 10, 11, 12],
-            "2": [5, 6, 7, 10, 11, 12],
+            "1": [-1, 0, 1, -1, 0, 1],
+            "2": [1, 1, 1, 2, 2, 2],
         }
         fake_embedding['filepath'] = [f"{i}.mrc" for i in range(len(fake_embedding["X"]))]
         cluster = pd.Series(np.array([1,1,1,2,2,2]))
