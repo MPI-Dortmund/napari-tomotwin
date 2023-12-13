@@ -156,7 +156,7 @@ class LoadUmapTool:
     def _load_umap(self, filename: pathlib.Path):
         self.pbar.progressbar.label = "Read umap"
         self.umap = pd.read_pickle(filename)
-        if 'tomogram_input_shape' in self.umap.attrs:
+        if 'tomogram_input_shape' not in self.umap.attrs:
             napari.utils.notifications.show_error("The umap was calculated with an old version of TomoTwin. Please update TomoTwin and re-estimate the umap.")
             self.pbar.progressbar.hide()
             import sys
