@@ -119,10 +119,10 @@ class LoadUmapTool:
         Creates mask where each individual subvolume of the running windows gets an individual ID
         """
         print("Create embedding mask")
-        Z = umap.attrs["tomogram_input_shape"][0]
-        Y = umap.attrs["tomogram_input_shape"][1]
-        X = umap.attrs["tomogram_input_shape"][2]
-        stride = umap.attrs["stride"][0]
+        Z = umap.attrs['embeddings_attrs']["tomogram_input_shape"][0]
+        Y = umap.attrs['embeddings_attrs']["tomogram_input_shape"][1]
+        X = umap.attrs['embeddings_attrs']["tomogram_input_shape"][2]
+        stride = umap.attrs['embeddings_attrs']["stride"][0]
         segmentation_array = np.zeros(shape=(Z, Y, X), dtype=np.float32)
         z = np.array(umap["Z"], dtype=int)
         y = np.array(umap["Y"], dtype=int)
@@ -156,7 +156,7 @@ class LoadUmapTool:
         if self.pbar is not None:
             self.pbar.progressbar.label = "Read umap"
         self.umap = pd.read_pickle(filename)
-        if 'tomogram_input_shape' not in self.umap.attrs:
+        if 'tomogram_input_shape' not in self.umap.attrs['embeddings_attrs']:
             napari.utils.notifications.show_error(
                 "The umap was calculated with an old version of TomoTwin. Please update TomoTwin and re-estimate the umap.")
             self.pbar.progressbar.hide()
