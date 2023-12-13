@@ -6,7 +6,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from magicgui import magic_factory
-from scipy.spatial.distance import cdist
+from sklearn.metrics.pairwise import pairwise_distances
 from napari.qt.threading import thread_worker
 from magicgui.tqdm import tqdm
 
@@ -26,7 +26,7 @@ def _get_medoid_embedding(embeddings: pd.DataFrame, max_embeddings: int = 50000)
         embeddings = embeddings.sample(max_embeddings)
 
     only_emb = embeddings.drop(columns=get_non_numeric_column_titles(embeddings), errors="ignore").astype(np.float32)
-    distance_matrix=cdist(only_emb,only_emb,metric='cosine') # its not the cosine similarity, rather a distance (its 0 in case of same embeddings)
+    distance_matrix=pairwise_distances(only_emb,metric='cosine', n_jobs=-1) # its not the cosine similarity, rather a distance (its 0 in case of same embeddings)
     medoid_index = np.argmin(np.sum(distance_matrix,axis=0))
     medoid = only_emb.iloc[medoid_index,:]
     return medoid, embeddings.iloc[[medoid_index]][['X','Y','Z']]
@@ -132,6 +132,7 @@ def make_targets(
 ):
     global pbar
     pbar = tqdm()
+    pbar.progressbar.label = "Save targets"
     worker = _run_worker(embeddings_filepath, label_layer, output_folder, average_method_name) # create "worker" object
     worker.finished.connect(lambda: pbar.progressbar.hide())
     worker.start()
