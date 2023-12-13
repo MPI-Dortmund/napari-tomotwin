@@ -29,7 +29,8 @@ def _get_medoid_embedding(embeddings: pd.DataFrame, max_embeddings: int = 50000)
     distance_matrix=pairwise_distances(only_emb,metric='cosine', n_jobs=-1) # its not the cosine similarity, rather a distance (its 0 in case of same embeddings)
     medoid_index = np.argmin(np.sum(distance_matrix,axis=0))
     medoid = only_emb.iloc[medoid_index,:]
-    return medoid, embeddings.iloc[[medoid_index]][['X','Y','Z']]
+    pos = embeddings.iloc[[medoid_index]][['X','Y','Z']]
+    return medoid, pos
 
 def _get_avg_embedding(embeddings: pd.DataFrame) -> Tuple[pd.DataFrame, npt.ArrayLike]:
     only_emb = embeddings.drop(columns=get_non_numeric_column_titles(embeddings), errors="ignore").astype(np.float32)
