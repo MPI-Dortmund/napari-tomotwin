@@ -66,14 +66,14 @@ class LoadUmapTool:
                            plot_cluster_name=plot_cluster_name, force_redraw=force_redraw)
 
 
-    def show_umap(self, lbl_data):
+    def show_umap(self, label_layer):
 
-
+        self.viewer.add_layer(label_layer)
         widget, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
                                                                       widget_name='Plotter Widget',
-                                                                      tabify=True)
+                                                                      tabify=False)
 
-        label_layer = self.viewer.add_labels(lbl_data, name='Label layer', features=self.umap, properties=self.umap)
+        #label_layer = self.viewer.add_labels(lbl_data, name='Label layer', features=self.umap, properties=self.umap)
 
         label_layer.opacity = 0.5
         label_layer.visible = False
@@ -156,22 +156,29 @@ class LoadUmapTool:
     def _load_umap(self, filename: pathlib.Path):
         self.umap = pd.read_pickle(filename)
         lbl_data = self.relabel_and_update()
+        from napari.layers import Layer
+        lbl_layer = Layer.create(lbl_data, {
+            "name": "Label layer"}, layer_type="Labels")
 
-        return lbl_data
+        return lbl_layer
     def load_umap(self, filename: pathlib.Path):
         self.pbar = tqdm()
 
         napari.current_viewer().window._qt_window.setEnabled(False)
         worker = self._load_umap(filename)
         worker.returned.connect(self.show_umap)
+
         return worker
 
 
+def set_width(widget):
+    widget.max_height= 100
 
 @magic_factory(
     call_button="Load",
     filename={'label': 'Path to UMAP:',
               'filter': '*.tumap'},
+    widget_init=set_width
 )
 def load_umap_magic(
         filename: pathlib.Path
@@ -180,7 +187,6 @@ def load_umap_magic(
     if filename.suffix not in ['.tumap']:
         notifications.show_error("UMAP is not specificed")
         return
-
     tool = LoadUmapTool()
     worker = tool.load_umap(filename)
     worker.start()
