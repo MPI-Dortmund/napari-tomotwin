@@ -40,6 +40,7 @@ class MyTestCase(unittest.TestCase):
                 "stride": (1,1,1),
                 "tomogram_input_shape": (100,100,100)
             }
+            umap_df.attrs['embeddings_path'] = ""
             umap_df.to_pickle(f"{tmpdirname}/umap.tumap")
 
             widget, _ = viewer.window.add_plugin_dock_widget('napari-tomotwin', widget_name='Cluster UMAP embeddings')
