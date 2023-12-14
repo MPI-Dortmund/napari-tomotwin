@@ -6,9 +6,10 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 from magicgui import magic_factory
-from sklearn.metrics.pairwise import pairwise_distances
-from napari.qt.threading import thread_worker
 from magicgui.tqdm import tqdm
+from napari.qt.threading import thread_worker
+from napari.utils import notifications
+from sklearn.metrics.pairwise import pairwise_distances
 
 global pbar
 
@@ -113,12 +114,35 @@ def _run_worker(embeddings_filepath, label_layer, output_folder: str, average_me
     embeddings = pd.read_pickle(embeddings_filepath)
     _run(clusters, embeddings, output_folder, average_method_name)
 
+def on_init(widget):
+
+    def update():
+        try:
+            if os.path.exists(widget.label_layer.value.metadata['tomotwin']['embeddings_path']):
+                widget.embeddings_filepath.value = widget.label_layer.value.metadata['tomotwin']['embeddings_path']
+                widget.embeddings_filepath.visible = False
+            else:
+                notifications.show_info("Can't find embeddings path in metadata. Please set it manually.")
+                widget.embeddings_filepath.visible = True
+        except:
+            notifications.show_info("Can't find embeddings path in metadata. Please set it manually.")
+            widget.embeddings_filepath.visible = True
+            pass
+    @widget.label_layer.changed.connect
+    def _on_image_path_changed():
+        update()
+
+    widget.max_height = 200
+    update()
+
+
 
 @magic_factory(
     call_button="Save",
     label_layer={'label': 'TomoTwin Label Mask:'},
     embeddings_filepath={'label': 'Path to embeddings file:',
               'filter': '*.temb'},
+    widget_init=on_init,
     average_method_name={'label': "Average method"},
     output_folder={
         'label': "Output folder",

@@ -1,17 +1,17 @@
-import napari
 import pathlib
-from magicgui import magic_factory
-from napari_clusters_plotter._plotter import PlotterWidget
-from napari_clusters_plotter._plotter_utilities import estimate_number_bins
-import pandas as pd
-import numpy as np
-from matplotlib.patches import Circle
-from napari.utils import notifications
-from qtpy.QtCore import Qt
-from qtpy.QtGui import QGuiApplication # pylint: disable=E0611
 from typing import List
-from napari.qt.threading import thread_worker
+
+import napari
+import numpy as np
+import pandas as pd
+from magicgui import magic_factory
 from magicgui.tqdm import tqdm
+from matplotlib.patches import Circle
+from napari.qt.threading import thread_worker
+from napari.utils import notifications
+from napari_clusters_plotter._plotter_utilities import estimate_number_bins
+from qtpy.QtCore import Qt
+from qtpy.QtGui import QGuiApplication  # pylint: disable=E0611
 
 
 class LoadUmapTool:
@@ -156,7 +156,7 @@ class LoadUmapTool:
         if self.pbar is not None:
             self.pbar.progressbar.label = "Read umap"
         self.umap = pd.read_pickle(filename)
-        if 'tomogram_input_shape' not in self.umap.attrs['embeddings_attrs']:
+        if 'embeddings_attrs' not in self.umap.attrs:
             napari.utils.notifications.show_error(
                 "The umap was calculated with an old version of TomoTwin. Please update TomoTwin and re-estimate the umap.")
             if self.pbar is not None:
@@ -171,6 +171,10 @@ class LoadUmapTool:
             "name": "Label layer"}, layer_type="Labels")
         lbl_layer.features = self.umap
         lbl_layer.properties = self.umap
+        lbl_layer.metadata['tomotwin'] = {
+            "umap_path": filename,
+            "embeddings_path": self.umap.attrs['embeddings_path']
+        }
 
         return lbl_layer
 
