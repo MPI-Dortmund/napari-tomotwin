@@ -28,6 +28,7 @@ class LoadUmapTool:
         '''
         Adds a circle on the umap when you click on the image
         '''
+        label_layer.visible = True
         val = label_layer._get_value(data_coordinates)
 
         umap_coordinates = umap.loc[
@@ -75,8 +76,8 @@ class LoadUmapTool:
 
         #label_layer = self.viewer.add_labels(lbl_data, name='Label layer', features=self.umap, properties=self.umap)
 
-        label_layer.opacity = 0.5
-        label_layer.visible = False
+        label_layer.opacity = 0
+        label_layer.visible = True
 
         @self.viewer.mouse_drag_callbacks.append
         def get_event(viewer, event):
