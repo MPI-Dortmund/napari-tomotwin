@@ -115,7 +115,7 @@ class LoadUmapTool:
         except:
             pass
 
-    def create_embedding_mask(self, umap: pd.DataFrame, values: np.array):
+    def create_embedding_mask(self, umap: pd.DataFrame, values: np.array) -> np.array:
         """
         Creates mask where each individual subvolume of the running windows gets an individual ID
         """
