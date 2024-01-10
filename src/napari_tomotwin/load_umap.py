@@ -5,7 +5,7 @@ import napari
 import numpy as np
 import pandas as pd
 from magicgui import magic_factory
-from magicgui.tqdm import tqdm
+from magicgui.tqdm import tqdm as mtqdm
 from matplotlib.patches import Circle
 from napari.qt.threading import thread_worker
 from napari.utils import notifications
@@ -23,6 +23,20 @@ class LoadUmapTool:
         self.pbar = None
         self.circles: List[Circle] = []
         self.viewer = napari.current_viewer()
+
+    def update_progress_bar(self,text: str) -> None:
+        try:
+            if self.pbar is not None:
+                self.pbar.progressbar.label = text
+        except AttributeError:
+            print("Can't initialize progress bar")
+
+    def hide_progress_bar(self) -> None:
+        try:
+            self.pbar.progressbar.hide()
+        except AttributeError:
+            print("Can't hide progress bar. Not initialized")
+
 
     def _draw_circle(self, data_coordinates, label_layer, umap):
         '''
@@ -68,7 +82,7 @@ class LoadUmapTool:
 
 
     def show_umap(self, label_layer):
-        self.pbar.progressbar.label = "Visualize umap"
+        self.update_progress_bar("Visualize umap")
         self.viewer.add_layer(label_layer)
         widget, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
                                                                       widget_name='Plotter Widget',
@@ -108,7 +122,7 @@ class LoadUmapTool:
                                           plot_y_axis_name="umap_1", plot_cluster_name=None,
                                           force_redraw=True)  # create "worker" object
             worker.returned.connect(activate_plotter_widget)
-            worker.finished.connect(lambda: self.pbar.progressbar.hide())
+            worker.finished.connect(self.hide_progress_bar)
             worker.finished.connect(lambda: napari.current_viewer().window._qt_window.setEnabled(True))
             worker.start()
 
@@ -130,7 +144,7 @@ class LoadUmapTool:
         x = np.array(umap["X"], dtype=int)
 
         # values = np.array(range(1, len(x) + 1))
-        for stride_x in tqdm(list(range(stride))):
+        for stride_x in mtqdm(list(range(stride))):
             for stride_y in range(stride):
                 for stride_z in range(stride):
                     index = (z + stride_z, y + stride_y, x + stride_x)
@@ -154,8 +168,7 @@ class LoadUmapTool:
         return lbl_data
 
     def load_umap(self, filename: pathlib.Path):
-        if self.pbar is not None:
-            self.pbar.progressbar.label = "Read umap"
+        self.update_progress_bar("Read umap")
         self.umap = pd.read_pickle(filename)
         if 'embeddings_attrs' not in self.umap.attrs:
             napari.utils.notifications.show_error(
@@ -164,8 +177,7 @@ class LoadUmapTool:
                 self.pbar.progressbar.hide()
             import sys
             sys.exit(1)
-        if self.pbar is not None:
-            self.pbar.progressbar.label = "Generate label layer"
+        self.update_progress_bar("Generate label layer")
         lbl_data = self.relabel_and_update()
         from napari.layers import Layer
         lbl_layer = Layer.create(lbl_data, {
@@ -184,7 +196,7 @@ class LoadUmapTool:
         return self.load_umap(filename)
 
     def start_umap_worker(self, filename: pathlib.Path):
-        self.pbar = tqdm()
+        self.pbar = mtqdm()
 
         napari.current_viewer().window._qt_window.setEnabled(False)
         worker = self._load_umap_worker(filename)
@@ -212,6 +224,7 @@ def load_umap_magic(
     tool = LoadUmapTool()
     worker = tool.start_umap_worker(filename)
     worker.start()
+
 
 
 

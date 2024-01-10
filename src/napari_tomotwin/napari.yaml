@@ -8,8 +8,13 @@ contributions:
     - id: napari-tomotwin.make_targets
       python_name: napari_tomotwin.make_targets:make_targets
       title: Save targets after clustering
+    - id: napari-tomotwin.RefineUmap
+      python_name: napari_tomotwin.recursive_umap:UmapRefinerQt
+      title: Refine umap
   widgets:
     - command: napari-tomotwin.load_umap_magic
       display_name: Cluster UMAP embeddings
     - command: napari-tomotwin.make_targets
       display_name: Save cluster targets
+    - command: napari-tomotwin.RefineUmap
+      display_name: Refine UMAP

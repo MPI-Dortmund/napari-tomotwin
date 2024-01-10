@@ -1,5 +1,7 @@
 name: napari-tomotwin
 channels:
+  - nvidia
+  - rapidsai
   - conda-forge
   - defaults
 dependencies:
@@ -14,4 +16,5 @@ dependencies:
   - napari-clusters-plotter
   - tqdm
   - mrcfile
-  - pip
+  - cuml=23.10
+  - cuda-version=11.8
