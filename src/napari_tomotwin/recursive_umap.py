@@ -29,52 +29,46 @@ except ImportError:
 class UmapRefiner:
 
     @staticmethod
-    def calcuate_umap(
+    def calculate_umap(
             embeddings: pd.DataFrame,
-            fit_sample_size: int = 400000,
             transform_chunk_size: int = 400000,
             reducer: "cuml.UMAP" = None,
             ncomponents=2,
             neighbors: int = 200,
             metric: str = "euclidean") -> typing.Tuple[ArrayLike, "cuml.UMAP"]:
+
         print("Prepare data")
-
-        fit_sample = embeddings.sample(n=min(len(embeddings), fit_sample_size), random_state=17)
-        fit_sample = fit_sample.drop(['filepath', 'Z', 'Y', 'X'], axis=1, errors='ignore')
         all_data = embeddings.drop(['filepath', 'Z', 'Y', 'X'], axis=1, errors='ignore')
-        if reducer is None:
-            reducer = cuml.UMAP(
-                n_neighbors=neighbors,
-                n_components=ncomponents,
-                n_epochs=None,  # means automatic selection
-                min_dist=0.0,
-                random_state=19,
-                metric=metric
-            )
-            print(f"Fit umap on {len(fit_sample)} samples")
-            reducer.fit(fit_sample)
-        else:
-            print("Use provided model. Don't fit.")
-
-        num_chunks = max(1, int(len(all_data) / transform_chunk_size))
+        indicis = np.arange(start=0, stop=len(all_data), dtype=int)
+        np.random.shuffle(indicis)
+        umap_embeddings = np.zeros(shape=(len(all_data),ncomponents))
+        num_chunks = max(1, int(len(indicis) / transform_chunk_size))
         print(
-            f"Transform complete dataset in {num_chunks} chunks with a chunksize of ~{int(len(all_data) / num_chunks)}")
+            f"Transform complete dataset in {num_chunks} chunks with a chunksize of ~{int(len(indicis) / num_chunks)}")
 
-        chunk_embeddings = []
-        for chunk in tqdm(np.array_split(all_data, num_chunks), desc="Transform"):
-            embedding = reducer.transform(chunk)
-            chunk_embeddings.append(embedding)
+        for chunk in tqdm(np.array_split(indicis, num_chunks), desc="Transform"):
+            if reducer is None:
+                reducer = cuml.UMAP(
+                    n_neighbors=neighbors,
+                    n_components=ncomponents,
+                    n_epochs=None,  # means automatic selection
+                    min_dist=0.0,
+                    random_state=19,
+                    metric=metric
+                )
+                print(f" Fit umap on {len(chunk)} samples")
+                umap_embeddings[chunk]= reducer.fit_transform(all_data.iloc[chunk])
+            else:
+                umap_embeddings[chunk] = reducer.transform(all_data.iloc[chunk])
 
-        embedding = np.concatenate(chunk_embeddings)
-
-        return embedding, reducer
+        return umap_embeddings, reducer
 
     @staticmethod
     def refine(clusters, embeddings: pd.DataFrame):
         embeddings = embeddings.drop(columns=["level_0", "index"], errors="ignore")
         clmask = (clusters > 0).to_numpy()
         cluster_embeddings = embeddings.loc[clmask, :]
-        embedding, _ = UmapRefiner.calcuate_umap(cluster_embeddings)
+        embedding, _ = UmapRefiner.calculate_umap(cluster_embeddings)
         return embedding, cluster_embeddings
 
 
@@ -122,7 +116,7 @@ class UmapRefinerQt(QWidget):
         used_embeddings.reset_index(drop=True, inplace=True)
 
         df_embeddings.columns = [f"umap_{i}" for i in range(umap_embeddings.shape[1])]
-        print("SHAPE DF", df_embeddings.shape, "USED", used_embeddings.shape)
+
         df_embeddings = pd.concat([used_embeddings[['X', 'Y', 'Z']], df_embeddings], axis=1)
         df_embeddings.attrs['embeddings_attrs'] = embeddings.attrs
         df_embeddings.attrs['embeddings_path'] = None
