@@ -10,6 +10,7 @@ from matplotlib.patches import Circle
 from napari.qt.threading import thread_worker
 from napari.utils import notifications
 from napari_clusters_plotter._plotter_utilities import estimate_number_bins
+from napari_clusters_plotter._plotter import PlotterWidget
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QGuiApplication  # pylint: disable=E0611
 
@@ -23,6 +24,10 @@ class LoadUmapTool:
         self.pbar = None
         self.circles: List[Circle] = []
         self.viewer = napari.current_viewer()
+        self.label_layer_name: str = "Label layer"
+
+    def set_new_label_layer_name(self, name: str):
+        self.label_layer_name = name
 
     def update_progress_bar(self,text: str) -> None:
         try:
@@ -84,9 +89,21 @@ class LoadUmapTool:
     def show_umap(self, label_layer):
         self.update_progress_bar("Visualize umap")
         self.viewer.add_layer(label_layer)
+        self.plotter_widget: PlotterWidget = None
+        _, refine_umap_widget = self.viewer.window.add_plugin_dock_widget('napari-tomotwin',
+                                                  widget_name='Refine UMAP',
+                                                  tabify=False)
+
+
+
+
         widget, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
                                                                       widget_name='Plotter Widget',
                                                                       tabify=False)
+
+        refine_umap_widget.set_umap_tool(self)
+        refine_umap_widget.set_plotter_widget(self.plotter_widget)
+
 
         #label_layer = self.viewer.add_labels(lbl_data, name='Label layer', features=self.umap, properties=self.umap)
 
@@ -112,12 +129,12 @@ class LoadUmapTool:
         self.plotter_widget.plot_hide_non_selected.setChecked(True)
         self.plotter_widget.setDisabled(True)
 
+
         def activate_plotter_widget():
             self.plotter_widget.setEnabled(True)
 
         try:
-            # Needs to run in a seperate thread, otherweise it freezes when it is loading the umap
-
+            # Needs to run in a separate thread, otherwise it freezes when it is loading the umap
             worker = self.run_clusters_plotter(self.plotter_widget, features=self.umap, plot_x_axis_name="umap_0",
                                           plot_y_axis_name="umap_1", plot_cluster_name=None,
                                           force_redraw=True)  # create "worker" object
@@ -181,7 +198,7 @@ class LoadUmapTool:
         lbl_data = self.relabel_and_update()
         from napari.layers import Layer
         lbl_layer = Layer.create(lbl_data, {
-            "name": "Label layer"}, layer_type="Labels")
+            "name": self.label_layer_name}, layer_type="Labels")
         lbl_layer.features = self.umap
         lbl_layer.properties = self.umap
         lbl_layer.metadata['tomotwin'] = {
@@ -196,8 +213,8 @@ class LoadUmapTool:
         return self.load_umap(filename)
 
     def start_umap_worker(self, filename: pathlib.Path):
-        self.pbar = mtqdm()
-
+        if self.pbar is None:
+            self.pbar = mtqdm()
         napari.current_viewer().window._qt_window.setEnabled(False)
         worker = self._load_umap_worker(filename)
         worker.returned.connect(self.show_umap)
@@ -222,6 +239,7 @@ def load_umap_magic(
         notifications.show_error("UMAP is not specificed")
         return
     tool = LoadUmapTool()
+    tool.set_new_label_layer_name("UMAP")
     worker = tool.start_umap_worker(filename)
     worker.start()
 

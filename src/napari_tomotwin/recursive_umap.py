@@ -12,6 +12,10 @@ from napari.layers import Labels
 from napari.utils import notifications
 from napari_tomotwin.load_umap import LoadUmapTool
 from numpy.typing import ArrayLike
+from napari_clusters_plotter._plotter import PlotterWidget
+from napari_clusters_plotter._utilities import get_layer_tabular_data
+from qtpy.QtWidgets import QApplication
+
 from qtpy.QtWidgets import (
     QFormLayout,
     QPushButton,
@@ -64,7 +68,7 @@ class UmapRefiner:
         return umap_embeddings, reducer
 
     @staticmethod
-    def refine(clusters, embeddings: pd.DataFrame):
+    def refine(clusters, embeddings: pd.DataFrame) -> tuple[np.array, pd.DataFrame]:
         embeddings = embeddings.drop(columns=["level_0", "index"], errors="ignore")
         clmask = (clusters > 0).to_numpy()
         cluster_embeddings = embeddings.loc[clmask, :]
@@ -77,40 +81,78 @@ class UmapRefiner:
 
 
 class UmapRefinerQt(QWidget):
+
+
     def __init__(self, napari_viewer: "napari.Viewer"):
         super().__init__()
 
         self.viewer = napari_viewer
         layout = QFormLayout()
 
+        app = QApplication.instance()
+        app.lastWindowClosed.connect(self.on_close_callback)  # this line is connection to signal
+
         layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         self.setLayout(layout)
         self._run_btn = QPushButton("Refine", self)
         self._run_btn.clicked.connect(self._on_refine_click)
 
-        self.layer_select = create_widget(annotation=Labels, label="layer")
-        self.select_path = create_widget(annotation=pathlib.Path, label="EmbeddingsPath")
-        self.layer_select.native.currentIndexChanged.connect(self._on_layer_changed)
-        self.select_path_label = QLabel("Embeddings path")
-        self.layout().addRow("Label layer", self.layer_select.native)
-        self.layout().addRow(self.select_path_label, self.select_path.native)
+        #self.layer_select = create_widget(annotation=Labels, label="layer")
+        #self.select_path = create_widget(annotation=pathlib.Path, label="EmbeddingsPath")
+        #self.layer_select.native.currentIndexChanged.connect(self._on_layer_changed)
+        #self.select_path_label = QLabel("Embeddings path")
+        #self.layout().addRow("Label layer", self.layer_select.native)
+        #self.layout().addRow(self.select_path_label, self.select_path.native)
         self.layout().addRow("",self._run_btn)
 
-        self.update_embeddings_file_selection()
+        #self.update_embeddings_file_selection()
+        self.plotter_widget: PlotterWidget
+        self.umap_tool: LoadUmapTool
+        self.tmp_dir_path: str
+
+
+    def cleanup(self):
+        shutil.rmtree(self.tmp_dir_path)
+    def on_close_callback(self):
+        self.cleanup()
+
+    def set_plotter_widget(self, widget: PlotterWidget):
+        self.plotter_widget = widget
+
+    def set_umap_tool(self, tool: LoadUmapTool):
+        self.umap_tool = tool
 
 
     def _on_refine_click(self):
         self.reestimate_umap()
 
     def _on_layer_changed(self):
-        self.update_embeddings_file_selection()
+        pass
+        #self.update_embeddings_file_selection()
+
+    def refresh(self):
+        features = get_layer_tabular_data(self.plotter_widget.layer_select.value)
+        self.plotter_widget.run(features=features,
+                                plot_x_axis_name=self.plotter_widget.plot_x_axis.currentText(),
+                                plot_y_axis_name=self.plotter_widget.plot_y_axis.currentText(),
+                                force_redraw=True)
+
+    @staticmethod
+    def random_filename() -> str:
+        return next(tempfile._get_candidate_names())
 
     def reestimate_umap(self):
+
         print("Read clusters")
-        clusters = self.layer_select.value.features['MANUAL_CLUSTER_ID']
+        clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
         print("Read embeddings")
-        embeddings = pd.read_pickle(self.select_path.value)
+        embeddings = pd.read_pickle(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'])
+        self.tmp_dir_path = tempfile.mkdtemp()
+
         umap_embeddings, used_embeddings = UmapRefiner.refine(clusters=clusters,embeddings=embeddings)
+        tmp_embed_pth = os.path.join(self.tmp_dir_path, UmapRefinerQt.random_filename())
+        used_embeddings.to_pickle(tmp_embed_pth)
+
         df_embeddings = pd.DataFrame(umap_embeddings)
         df_embeddings.reset_index(drop=True, inplace=True)
         used_embeddings.reset_index(drop=True, inplace=True)
@@ -119,14 +161,15 @@ class UmapRefinerQt(QWidget):
 
         df_embeddings = pd.concat([used_embeddings[['X', 'Y', 'Z']], df_embeddings], axis=1)
         df_embeddings.attrs['embeddings_attrs'] = embeddings.attrs
-        df_embeddings.attrs['embeddings_path'] = None
-        tmpdirname = tempfile.mkdtemp()
-        tmp_umap_pth = os.path.join(tmpdirname, "temp_umap.tumap")
+        df_embeddings.attrs['embeddings_path'] = tmp_embed_pth
+
+        tmp_umap_pth = os.path.join(self.tmp_dir_path, UmapRefinerQt.random_filename())
         df_embeddings.to_pickle(tmp_umap_pth)
-        utool = LoadUmapTool()
-        worker = utool.start_umap_worker(tmp_umap_pth)
-        worker.returned.connect(lambda: shutil.rmtree(tmpdirname))
+        self.umap_tool.set_new_label_layer_name("UMAP Refined")
+        worker = self.umap_tool.start_umap_worker(tmp_umap_pth)
         worker.start()
+
+
 
     def update_embeddings_file_selection(self):
 
