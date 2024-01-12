@@ -215,6 +215,8 @@ class LoadUmapTool:
     def start_umap_worker(self, filename: pathlib.Path):
         if self.pbar is None:
             self.pbar = mtqdm()
+        else:
+            self.pbar.progressbar.show(True)
         napari.current_viewer().window._qt_window.setEnabled(False)
         worker = self._load_umap_worker(filename)
         worker.returned.connect(self.show_umap)
