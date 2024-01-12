@@ -1,19 +1,17 @@
 import os
 import os.path
-import pathlib
 import shutil
 import tempfile
 import typing
 
 import numpy as np
 import pandas as pd
-from magicgui.widgets import create_widget
-from napari.layers import Labels
+
 from napari.utils import notifications
 from napari_tomotwin.load_umap import LoadUmapTool
 from numpy.typing import ArrayLike
 from napari_clusters_plotter._plotter import PlotterWidget
-from napari_clusters_plotter._utilities import get_layer_tabular_data
+from napari.qt.threading import thread_worker
 from qtpy.QtWidgets import QApplication
 
 from qtpy.QtWidgets import (
@@ -67,13 +65,31 @@ class UmapRefiner:
 
         return umap_embeddings, reducer
 
+
+
     @staticmethod
-    def refine(clusters, embeddings: pd.DataFrame) -> tuple[np.array, pd.DataFrame]:
+    def refine(clusters, embeddings: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         embeddings = embeddings.drop(columns=["level_0", "index"], errors="ignore")
-        clmask = (clusters > 0).to_numpy()
-        cluster_embeddings = embeddings.loc[clmask, :]
-        embedding, _ = UmapRefiner.calculate_umap(cluster_embeddings)
-        return embedding, cluster_embeddings
+        clmask = (clusters > 0).to_numpy().squeeze()
+        input_embeddings = embeddings.iloc[clmask, :]
+        umap_embedding_np, _ = UmapRefiner.calculate_umap(input_embeddings)
+
+        df_embeddings = pd.DataFrame(umap_embedding_np)
+        df_embeddings.reset_index(drop=True, inplace=True)
+        df_embeddings.columns = [f"umap_{i}" for i in range(umap_embedding_np.shape[1])]
+
+
+        input_embeddings.reset_index(drop=True, inplace=True)
+        df_embeddings = pd.concat([input_embeddings[['X', 'Y', 'Z']], df_embeddings], axis=1)
+        df_embeddings.attrs['embeddings_attrs'] = embeddings.attrs
+
+        return df_embeddings, input_embeddings
+
+    @staticmethod
+    @thread_worker
+    def refine_worker(clusters, embeddings: pd.DataFrame):
+        return UmapRefiner.refine(clusters, embeddings)
+
 
 
 
@@ -94,18 +110,9 @@ class UmapRefinerQt(QWidget):
 
         layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         self.setLayout(layout)
-        self._run_btn = QPushButton("Refine", self)
+        self._run_btn = QPushButton("Recalculate UMAP for selected clusters", self)
         self._run_btn.clicked.connect(self._on_refine_click)
-
-        #self.layer_select = create_widget(annotation=Labels, label="layer")
-        #self.select_path = create_widget(annotation=pathlib.Path, label="EmbeddingsPath")
-        #self.layer_select.native.currentIndexChanged.connect(self._on_layer_changed)
-        #self.select_path_label = QLabel("Embeddings path")
-        #self.layout().addRow("Label layer", self.layer_select.native)
-        #self.layout().addRow(self.select_path_label, self.select_path.native)
         self.layout().addRow("",self._run_btn)
-
-        #self.update_embeddings_file_selection()
         self.plotter_widget: PlotterWidget
         self.umap_tool: LoadUmapTool
         self.tmp_dir_path: str
@@ -124,68 +131,44 @@ class UmapRefinerQt(QWidget):
 
 
     def _on_refine_click(self):
-        self.reestimate_umap()
-
-    def _on_layer_changed(self):
-        pass
-        #self.update_embeddings_file_selection()
-
-    def refresh(self):
-        features = get_layer_tabular_data(self.plotter_widget.layer_select.value)
-        self.plotter_widget.run(features=features,
-                                plot_x_axis_name=self.plotter_widget.plot_x_axis.currentText(),
-                                plot_y_axis_name=self.plotter_widget.plot_y_axis.currentText(),
-                                force_redraw=True)
+       self.reestimate_umap()
 
     @staticmethod
     def random_filename() -> str:
         return next(tempfile._get_candidate_names())
 
+
+
     def reestimate_umap(self):
 
-        print("Read clusters")
-        clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+
+        try:
+            print("Read clusters")
+            clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+            if not np.any(clusters>0):
+                raise KeyError
+        except KeyError:
+            notifications.show_info(f"Not cluster selected. Can't refine.")
+            return
         print("Read embeddings")
         embeddings = pd.read_pickle(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'])
-        self.tmp_dir_path = tempfile.mkdtemp()
+
 
         umap_embeddings, used_embeddings = UmapRefiner.refine(clusters=clusters,embeddings=embeddings)
+
+
+        self.tmp_dir_path = tempfile.mkdtemp()
         tmp_embed_pth = os.path.join(self.tmp_dir_path, UmapRefinerQt.random_filename())
         used_embeddings.to_pickle(tmp_embed_pth)
-
-        df_embeddings = pd.DataFrame(umap_embeddings)
-        df_embeddings.reset_index(drop=True, inplace=True)
-        used_embeddings.reset_index(drop=True, inplace=True)
-
-        df_embeddings.columns = [f"umap_{i}" for i in range(umap_embeddings.shape[1])]
-
-        df_embeddings = pd.concat([used_embeddings[['X', 'Y', 'Z']], df_embeddings], axis=1)
-        df_embeddings.attrs['embeddings_attrs'] = embeddings.attrs
-        df_embeddings.attrs['embeddings_path'] = tmp_embed_pth
-
+        umap_embeddings.attrs['embeddings_path'] = tmp_embed_pth
         tmp_umap_pth = os.path.join(self.tmp_dir_path, UmapRefinerQt.random_filename())
-        df_embeddings.to_pickle(tmp_umap_pth)
+        umap_embeddings.to_pickle(tmp_umap_pth)
+
+
+
+        # Visualizse in
         self.umap_tool.set_new_label_layer_name("UMAP Refined")
         worker = self.umap_tool.start_umap_worker(tmp_umap_pth)
         worker.start()
 
-
-
-    def update_embeddings_file_selection(self):
-
-        def make_visible(visible: bool):
-            self.select_path.visible = False
-            self.select_path_label.setHidden(~visible)
-
-        try:
-            epth = self.layer_select.value.metadata['tomotwin']['embeddings_path']
-            if os.path.exists(epth):
-                self.select_path.value = self.layer_select.value.metadata['tomotwin']['embeddings_path']
-                make_visible(False)
-            else:
-                notifications.show_info(f"Embeddings path in metadata ({epth}) does not exist. Please set it manually.")
-                make_visible(True)
-        except :
-            notifications.show_info("Can't find embeddings path in metadata. Please set it manually.")
-            make_visible(True)
 
