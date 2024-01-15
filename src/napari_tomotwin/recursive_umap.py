@@ -1,3 +1,4 @@
+import math
 import os
 import os.path
 import shutil
@@ -18,7 +19,9 @@ from qtpy.QtWidgets import (
     QFormLayout,
     QPushButton,
     QWidget,
-    QLabel
+    QLabel,
+    QFileDialog,
+    QMessageBox
 )
 from tqdm import tqdm
 
@@ -44,7 +47,7 @@ class UmapRefiner:
         indicis = np.arange(start=0, stop=len(all_data), dtype=int)
         np.random.shuffle(indicis)
         umap_embeddings = np.zeros(shape=(len(all_data),ncomponents))
-        num_chunks = max(1, int(len(indicis) / transform_chunk_size))
+        num_chunks = max(1, int(math.ceil(len(indicis) / transform_chunk_size)))
         print(
             f"Transform complete dataset in {num_chunks} chunks with a chunksize of ~{int(len(indicis) / num_chunks)}")
 
@@ -138,7 +141,6 @@ class UmapRefinerQt(QWidget):
         return next(tempfile._get_candidate_names())
 
 
-
     def reestimate_umap(self):
 
 
@@ -151,7 +153,29 @@ class UmapRefinerQt(QWidget):
             notifications.show_info(f"Not cluster selected. Can't refine.")
             return
         print("Read embeddings")
-        embeddings = pd.read_pickle(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'])
+
+        def get_embedding_path(pth: str) -> str:
+            if not os.path.exists(pth):
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Critical)
+                msg.setWindowTitle("Can't open embedding file")
+                msg.setText("Can't open embedding file")
+                msg.setInformativeText(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'])
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec_()
+                pth = QFileDialog.getOpenFileName(self, 'Open embedding file',
+                                                    os.getcwd(),
+                                                    "Embedding file (*.temb)")[0]
+
+            return pth
+
+        emb_pth = get_embedding_path(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'])
+
+        if emb_pth == "":
+            print("Not path selected.")
+            return
+
+        embeddings = pd.read_pickle(emb_pth)
 
 
         umap_embeddings, used_embeddings = UmapRefiner.refine(clusters=clusters,embeddings=embeddings)
