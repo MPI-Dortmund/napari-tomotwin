@@ -19,7 +19,6 @@ from qtpy.QtWidgets import (
     QFormLayout,
     QPushButton,
     QWidget,
-    QLabel,
     QFileDialog,
     QMessageBox
 )
@@ -155,12 +154,16 @@ class UmapRefinerQt(QWidget):
         print("Read embeddings")
 
         def get_embedding_path(pth: str) -> str:
+            '''
+            Checks if the embedding path exists. If it does not exist, it opens a file selection dialogue. Otherwise it returns the path.
+            '''
             if not os.path.exists(pth):
                 msg = QMessageBox()
                 msg.setIcon(QMessageBox.Critical)
                 msg.setWindowTitle("Can't open embedding file")
                 msg.setText("Can't open embedding file")
-                msg.setInformativeText(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'])
+                msg.setInformativeText("Embedding path in metadata data (see below) does not exist or can't be accesst. Please click OK and select the path to the embedding file.")
+                msg.setDetailedText(pth)
                 msg.setStandardButtons(QMessageBox.Ok)
                 msg.exec_()
                 pth = QFileDialog.getOpenFileName(self, 'Open embedding file',

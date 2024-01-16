@@ -13,6 +13,11 @@ from napari_clusters_plotter._plotter_utilities import estimate_number_bins
 from napari_clusters_plotter._plotter import PlotterWidget
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QGuiApplication  # pylint: disable=E0611
+import os
+from qtpy.QtWidgets import (
+    QFileDialog,
+    QMessageBox
+)
 
 
 class LoadUmapTool:
@@ -87,6 +92,17 @@ class LoadUmapTool:
 
 
     def show_umap(self, label_layer):
+
+        valid = self.check_umap_metadata()
+
+        if not valid:
+            if self.pbar is not None:
+                self.pbar.progressbar.hide()
+            import sys
+            sys.exit(1)
+
+        label_layer.metadata['tomotwin']["embeddings_path"] = self.umap.attrs['embeddings_path'] #might have been updated while checking umap metadata
+
         self.update_progress_bar("Visualize umap")
         self.viewer.add_layer(label_layer)
         self.plotter_widget: PlotterWidget = None
@@ -184,16 +200,45 @@ class LoadUmapTool:
         lbl_data = self.create_embedding_mask(self.umap, new_lbl).astype(np.int64)
         return lbl_data
 
-    def load_umap(self, filename: pathlib.Path):
-        self.update_progress_bar("Read umap")
-        self.umap = pd.read_pickle(filename)
+    def check_umap_metadata(self) -> bool:
+        def get_embedding_path(pth: str) -> str:
+            '''
+            Checks if the embedding path exists. If it does not exist, it opens a file selection dialogue. Otherwise it returns the path.
+            '''
+            if not os.path.exists(pth):
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Critical)
+                msg.setWindowTitle("Can't open embedding file")
+                msg.setText("Can't open embedding file")
+                msg.setInformativeText(
+                    "The embedding path in the metadata (see below) doesn't exist or can't be accessed, click OK and select the path to the embedding file.")
+                msg.setDetailedText(pth)
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec_()
+                pth = QFileDialog.getOpenFileName(napari.current_viewer().window._qt_window, 'Open embedding file',
+                                                  os.getcwd(),
+                                                  "Embedding file (*.temb)")[0]
+
+            return pth
+
         if 'embeddings_attrs' not in self.umap.attrs:
             napari.utils.notifications.show_error(
                 "The umap was calculated with an old version of TomoTwin. Please update TomoTwin and re-estimate the umap.")
-            if self.pbar is not None:
-                self.pbar.progressbar.hide()
-            import sys
-            sys.exit(1)
+            return False
+
+        emb_path = get_embedding_path(self.umap.attrs['embeddings_path'])
+
+        if emb_path == "":
+            return False
+
+        self.umap.attrs['embeddings_path'] = emb_path # overwrite in case it was updated
+
+        return True
+
+
+    def load_umap(self, filename: pathlib.Path):
+        self.update_progress_bar("Read umap")
+        self.umap = pd.read_pickle(filename)
         self.update_progress_bar("Generate label layer")
         lbl_data = self.relabel_and_update()
         from napari.layers import Layer
@@ -205,6 +250,7 @@ class LoadUmapTool:
             "umap_path": filename,
             "embeddings_path": self.umap.attrs['embeddings_path']
         }
+
 
         return lbl_layer
 
