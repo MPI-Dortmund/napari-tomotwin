@@ -118,6 +118,7 @@ class UmapRefinerQt(QWidget):
         self.plotter_widget: PlotterWidget
         self.umap_tool: LoadUmapTool
         self.tmp_dir_path: str
+        self.setMaximumHeight(100)
 
 
     def cleanup(self):
