@@ -122,7 +122,10 @@ class UmapRefinerQt(QWidget):
 
 
     def cleanup(self):
-        shutil.rmtree(self.tmp_dir_path)
+        try:
+            shutil.rmtree(self.tmp_dir_path)
+        except:
+            pass
     def on_close_callback(self):
         self.cleanup()
 

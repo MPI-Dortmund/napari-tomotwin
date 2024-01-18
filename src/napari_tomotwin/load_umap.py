@@ -109,6 +109,7 @@ class LoadUmapTool:
         _, refine_umap_widget = self.viewer.window.add_plugin_dock_widget('napari-tomotwin',
                                                   widget_name='Refine UMAP',
                                                   tabify=False)
+        refine_umap_widget.visible=False
 
 
 
