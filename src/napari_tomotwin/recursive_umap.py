@@ -14,20 +14,19 @@ from numpy.typing import ArrayLike
 from napari_clusters_plotter._plotter import PlotterWidget
 from napari.qt.threading import thread_worker
 from qtpy.QtWidgets import QApplication
+from multiprocessing import Process, Queue, Manager
 
 from qtpy.QtWidgets import (
     QFormLayout,
     QPushButton,
     QWidget,
     QFileDialog,
-    QMessageBox
+    QMessageBox,
+    QProgressBar,
+    QLabel
+
 )
 from tqdm import tqdm
-
-try:
-    import cuml
-except ImportError:
-    print("cuml can't be loaded")
 
 
 class UmapRefiner:
@@ -41,6 +40,12 @@ class UmapRefiner:
             neighbors: int = 200,
             metric: str = "euclidean") -> typing.Tuple[ArrayLike, "cuml.UMAP"]:
 
+        try:
+            # Import has to be happen here, as otherwise cuml is not working from a seperate process
+            import cuml
+            import cudf
+        except ImportError:
+            print("cuml can't be loaded")
         print("Prepare data")
         all_data = embeddings.drop(['filepath', 'Z', 'Y', 'X'], axis=1, errors='ignore')
         indicis = np.arange(start=0, stop=len(all_data), dtype=int)
@@ -61,10 +66,11 @@ class UmapRefiner:
                     metric=metric
                 )
                 print(f" Fit umap on {len(chunk)} samples")
-                umap_embeddings[chunk]= reducer.fit_transform(all_data.iloc[chunk])
+                c = all_data.iloc[chunk]
+                umap_embeddings[chunk]= reducer.fit_transform(c)
             else:
                 umap_embeddings[chunk] = reducer.transform(all_data.iloc[chunk])
-
+        del cuml
         return umap_embeddings, reducer
 
 
@@ -75,6 +81,7 @@ class UmapRefiner:
         clmask = (clusters > 0).to_numpy().squeeze()
         input_embeddings = embeddings.iloc[clmask, :]
         umap_embedding_np, _ = UmapRefiner.calculate_umap(input_embeddings)
+
 
         df_embeddings = pd.DataFrame(umap_embedding_np)
         df_embeddings.reset_index(drop=True, inplace=True)
@@ -90,7 +97,14 @@ class UmapRefiner:
     @staticmethod
     @thread_worker
     def refine_worker(clusters, embeddings: pd.DataFrame):
+
         return UmapRefiner.refine(clusters, embeddings)
+
+    @staticmethod
+    def refine_worker_parallel(q: Queue, clusters, embeddings: pd.DataFrame):
+        umap_embeddings, used_embeddings = UmapRefiner.refine(clusters, embeddings)
+        q.put((umap_embeddings, used_embeddings))
+
 
 
 
@@ -112,9 +126,18 @@ class UmapRefinerQt(QWidget):
 
         layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         self.setLayout(layout)
+
         self._run_btn = QPushButton("Recalculate UMAP for selected clusters", self)
         self._run_btn.clicked.connect(self._on_refine_click)
         self.layout().addRow("",self._run_btn)
+
+        self.progressBar = QProgressBar(self)
+        self.pbar_label = QLabel("")
+        self.progressBar.setRange(0, 0)
+        self.layout().addRow(self.pbar_label,self.progressBar)
+
+
+
         self.plotter_widget: PlotterWidget
         self.umap_tool: LoadUmapTool
         self.tmp_dir_path: str
@@ -124,7 +147,8 @@ class UmapRefinerQt(QWidget):
     def cleanup(self):
         try:
             shutil.rmtree(self.tmp_dir_path)
-        except:
+        except AttributeError:
+            # Means that the there was no recalculated UMAP
             pass
     def on_close_callback(self):
         self.cleanup()
@@ -143,6 +167,19 @@ class UmapRefinerQt(QWidget):
     def random_filename() -> str:
         return next(tempfile._get_candidate_names())
 
+    def show_umap(self, res):
+        (umap_embeddings, used_embeddings) = res
+        self.tmp_dir_path = tempfile.mkdtemp()
+        tmp_embed_pth = os.path.join(self.tmp_dir_path, UmapRefinerQt.random_filename())
+        used_embeddings.to_pickle(tmp_embed_pth)
+        umap_embeddings.attrs['embeddings_path'] = tmp_embed_pth
+        tmp_umap_pth = os.path.join(self.tmp_dir_path, UmapRefinerQt.random_filename())
+        umap_embeddings.to_pickle(tmp_umap_pth)
+
+        # Visualizse in
+        self.umap_tool.set_new_label_layer_name("UMAP Refined")
+        worker = self.umap_tool.start_umap_worker(tmp_umap_pth)
+        worker.start()
 
     def reestimate_umap(self):
 
@@ -183,10 +220,16 @@ class UmapRefinerQt(QWidget):
             return
 
         embeddings = pd.read_pickle(emb_pth)
-
-
-        umap_embeddings, used_embeddings = UmapRefiner.refine(clusters=clusters,embeddings=embeddings)
-
+        manager = Manager()
+        q = manager.Queue() # Had to use a managed Queue isntead of "normal", as otherwise the process did not return.
+        p = Process(target=UmapRefiner.refine_worker_parallel, args=(q, clusters,embeddings))
+        p.start()
+        print("WAIT")
+        p.join()
+        print("DONE")
+        (umap_embeddings, used_embeddings) = q.get()
+        print("Got it...")
+        #umap_embeddings, used_embeddings = UmapRefiner.refine(clusters=clusters,embeddings=embeddings)
 
         self.tmp_dir_path = tempfile.mkdtemp()
         tmp_embed_pth = os.path.join(self.tmp_dir_path, UmapRefinerQt.random_filename())
@@ -195,11 +238,12 @@ class UmapRefinerQt(QWidget):
         tmp_umap_pth = os.path.join(self.tmp_dir_path, UmapRefinerQt.random_filename())
         umap_embeddings.to_pickle(tmp_umap_pth)
 
-
-
         # Visualizse in
         self.umap_tool.set_new_label_layer_name("UMAP Refined")
         worker = self.umap_tool.start_umap_worker(tmp_umap_pth)
         worker.start()
+
+
+
 
 
