@@ -1,3 +1,2 @@
 [MAIN]
-
-extension-pkg-whitelist=pyqt, pyqt5, pyqt5-qt5
+extension-pkg-whitelist=pyqt,PyQt5,pyqt5-qt5,qtpy
