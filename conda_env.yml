@@ -16,5 +16,5 @@ dependencies:
   - napari-clusters-plotter
   - tqdm
   - mrcfile
-  - cuml=23.10
+  - cuml=23.12
   - cuda-version=11.8
