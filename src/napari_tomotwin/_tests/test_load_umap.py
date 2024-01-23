@@ -12,7 +12,7 @@ from napari_tomotwin.load_umap import LoadUmapTool
 class MyTestCase(unittest.TestCase):
     def test_something(self):
         viewer = napari.Viewer()
-        tool = LoadUmapTool()
+        tool = LoadUmapTool(None)
 
         rand_volint = np.arange(0,100*100).reshape(100,100).astype(np.float32)
 
