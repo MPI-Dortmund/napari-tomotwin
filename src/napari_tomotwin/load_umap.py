@@ -111,10 +111,11 @@ class LoadUmapTool:
         label_layer.opacity = 0
         label_layer.visible = True
 
-        @self.viewer.mouse_drag_callbacks.append
-        def get_event(viewer, event):
+       # @self.viewer.mouse_drag_callbacks.append
+        def drag_event(viewer, event):
             data_coordinates = label_layer.world_to_data(event.position)
             self._draw_circle(data_coordinates, label_layer, self.umap)
+        self.viewer.mouse_drag_callbacks.append(drag_event)
 
         try:
             # napari-clusters-plotter > 0.7.4

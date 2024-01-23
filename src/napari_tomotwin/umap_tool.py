@@ -151,14 +151,22 @@ class UmapToolQt(QWidget):
         umap_pth_layout.addWidget(self._select_umap_pth_btn)
         self.layout().addRow("Path to UMAP:", umap_pth_layout)
         self.layout().addRow("", self._load_umap_btn)
-        self.plotter_widget: PlotterWidget
+        self.plotter_widget: PlotterWidget = None
+        self.plotter_Widget_dock = None
         self.umap_tool: LoadUmapTool
 
         def load_umap_btn_clicked():
+            if self.plotter_widget is not None:
+                ret = QMessageBox.question(self, '', "Do you really want to close the current UMAP and load another?", QMessageBox.Yes | QMessageBox.No)
+                if ret == QMessageBox.No:
+                    return
+                self.viewer.window.remove_dock_widget(self.plotter_Widget_dock)
 
-            _, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
+            self.plotter_Widget_dock, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
                                                                                widget_name='Plotter Widget',
                                                                                tabify=False)
+
+
             self.umap_tool = LoadUmapTool(pbar=self.progressBar, plotter_widget=self.plotter_widget)
 
             self.progressBar.setHidden(False)
