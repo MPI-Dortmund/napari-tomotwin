@@ -24,7 +24,6 @@ from qtpy.QtWidgets import (
     QWidget,
     QFileDialog,
     QMessageBox,
-    QProgressBar,
     QLabel,
     QHBoxLayout,
     QLineEdit
