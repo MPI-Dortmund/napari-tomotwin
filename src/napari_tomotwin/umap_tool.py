@@ -189,8 +189,10 @@ class UmapToolQt(QWidget):
         self.progressBar.hide()
         self.layout().addRow(self.pbar_label,self.progressBar)
 
+        self.refinement_done.connect(self.show_umap_callback)
         self.tmp_dir_path: str
         self.setMaximumHeight(150)
+
 
 
 
@@ -280,5 +282,5 @@ class UmapToolQt(QWidget):
 
         # this workaround using signal is necessary, as "add_done_callback" starts the method
         # in a separate thread, but to change Qt elements, it must be run in the same thread as the main program.
-        self.refinement_done.connect(self.show_umap_callback)
+
         f.add_done_callback(self.refinement_done.emit)
