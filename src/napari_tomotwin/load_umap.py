@@ -4,14 +4,12 @@ from typing import List
 import napari
 import numpy as np
 import pandas as pd
-from magicgui import magic_factory
 from magicgui.tqdm import tqdm as mtqdm
 from matplotlib.patches import Circle
 from napari.qt.threading import thread_worker
 from napari.utils import notifications
 from napari_clusters_plotter._plotter_utilities import estimate_number_bins
 from napari_clusters_plotter._plotter import PlotterWidget
-from qtpy.QtCore import Qt
 from qtpy.QtGui import QGuiApplication  # pylint: disable=E0611
 import os
 from qtpy.QtWidgets import (
@@ -32,6 +30,7 @@ class LoadUmapTool:
         self.circles: List[Circle] = []
         self.viewer = napari.current_viewer()
         self.label_layer_name: str = "Label layer"
+        self.anchor_tool = None
 
     def set_new_label_layer_name(self, name: str):
         self.label_layer_name = name
@@ -50,34 +49,6 @@ class LoadUmapTool:
             print("Can't hide progress bar. Not initialized")
 
 
-    def _draw_circle(self, data_coordinates, label_layer, umap):
-        '''
-        Adds a circle on the umap when you click on the image
-        '''
-        label_layer.visible = True
-        val = label_layer._get_value(data_coordinates)
-
-        umap_coordinates = umap.loc[
-            umap['label'] == val, [self.plotter_widget.plot_x_axis.currentText(), self.plotter_widget.plot_y_axis.currentText()]]
-
-        try:
-            center = umap_coordinates.values.tolist()[0]
-        except IndexError:
-            return
-        modifiers = QGuiApplication.keyboardModifiers()
-        if modifiers == Qt.ShiftModifier:
-            pass
-        else:
-            for c in self.circles[::-1]:
-                c.remove()
-            self.circles = []
-        col = '#40d5aa'
-        if self.plotter_widget.log_scale.isChecked():
-            col = '#79abfd'
-        circle = Circle(tuple(center), 0.5, fill=False, color=col)
-        self.circles.append(circle)
-        self.plotter_widget.graphics_widget.axes.add_patch(circle)
-        self.plotter_widget.graphics_widget.draw_idle()
 
     @thread_worker()
     def run_clusters_plotter(self, plotter_widget,
@@ -110,12 +81,6 @@ class LoadUmapTool:
 
         label_layer.opacity = 0
         label_layer.visible = True
-
-       # @self.viewer.mouse_drag_callbacks.append
-        def drag_event(viewer, event):
-            data_coordinates = label_layer.world_to_data(event.position)
-            self._draw_circle(data_coordinates, label_layer, self.umap)
-        self.viewer.mouse_drag_callbacks.append(drag_event)
 
         try:
             # napari-clusters-plotter > 0.7.4
@@ -222,6 +187,8 @@ class LoadUmapTool:
         self.update_progress_bar("Read umap")
         self.umap = pd.read_pickle(filename)
         self.update_progress_bar("Generate label layer")
+
+
         lbl_data = self.relabel_and_update()
         from napari.layers import Layer
         lbl_layer = Layer.create(lbl_data, {
@@ -232,6 +199,9 @@ class LoadUmapTool:
             "umap_path": filename,
             "embeddings_path": self.umap.attrs['embeddings_path']
         }
+
+        from napari_tomotwin.anchor_tool import AnchorTool
+        AnchorTool(self.plotter_widget, self.umap, lbl_layer)
 
 
         return lbl_layer
