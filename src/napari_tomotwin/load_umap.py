@@ -16,17 +16,19 @@ from qtpy.QtGui import QGuiApplication  # pylint: disable=E0611
 import os
 from qtpy.QtWidgets import (
     QFileDialog,
-    QMessageBox
+    QMessageBox,
+    QProgressBar
 )
+from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 
 
 class LoadUmapTool:
 
-    def __init__(self):
+    def __init__(self, pbar: LabeledProgressBar, plotter_widget = None):
 
         self.umap = None
-        self.plotter_widget = None
-        self.pbar = None
+        self.plotter_widget = plotter_widget
+        self.pbar = pbar
         self.circles: List[Circle] = []
         self.viewer = napari.current_viewer()
         self.label_layer_name: str = "Label layer"
@@ -37,13 +39,13 @@ class LoadUmapTool:
     def update_progress_bar(self,text: str) -> None:
         try:
             if self.pbar is not None:
-                self.pbar.progressbar.label = text
+                self.pbar.set_label_text(text)
         except AttributeError:
             print("Can't initialize progress bar")
 
     def hide_progress_bar(self) -> None:
         try:
-            self.pbar.progressbar.hide()
+            self.pbar.setHidden(True)
         except AttributeError:
             print("Can't hide progress bar. Not initialized")
 
@@ -97,7 +99,7 @@ class LoadUmapTool:
 
         if not valid:
             if self.pbar is not None:
-                self.pbar.progressbar.hide()
+                self.pbar.hide()
             import sys
             sys.exit(1)
 
@@ -105,24 +107,6 @@ class LoadUmapTool:
 
         self.update_progress_bar("Visualize umap")
         self.viewer.add_layer(label_layer)
-        self.plotter_widget: PlotterWidget = None
-        _, refine_umap_widget = self.viewer.window.add_plugin_dock_widget('napari-tomotwin',
-                                                  widget_name='Refine UMAP',
-                                                  tabify=False)
-        refine_umap_widget.visible=False
-
-
-
-
-        widget, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
-                                                                      widget_name='Plotter Widget',
-                                                                      tabify=False)
-
-        refine_umap_widget.set_umap_tool(self)
-        refine_umap_widget.set_plotter_widget(self.plotter_widget)
-
-
-        #label_layer = self.viewer.add_labels(lbl_data, name='Label layer', features=self.umap, properties=self.umap)
 
         label_layer.opacity = 0
         label_layer.visible = True
@@ -146,16 +130,12 @@ class LoadUmapTool:
         self.plotter_widget.plot_hide_non_selected.setChecked(True)
         self.plotter_widget.setDisabled(True)
 
-
-        def activate_plotter_widget():
-            self.plotter_widget.setEnabled(True)
-
         try:
             # Needs to run in a separate thread, otherwise it freezes when it is loading the umap
             worker = self.run_clusters_plotter(self.plotter_widget, features=self.umap, plot_x_axis_name="umap_0",
                                           plot_y_axis_name="umap_1", plot_cluster_name=None,
                                           force_redraw=True)  # create "worker" object
-            worker.returned.connect(activate_plotter_widget)
+            worker.returned.connect(lambda x: self.plotter_widget.setEnabled(True))
             worker.finished.connect(self.hide_progress_bar)
             worker.finished.connect(lambda: napari.current_viewer().window._qt_window.setEnabled(True))
             worker.start()
@@ -260,37 +240,12 @@ class LoadUmapTool:
         return self.load_umap(filename)
 
     def start_umap_worker(self, filename: pathlib.Path):
-        if self.pbar is None:
-            self.pbar = mtqdm()
-        else:
-            self.pbar.progressbar.show(True)
         napari.current_viewer().window._qt_window.setEnabled(False)
         worker = self._load_umap_worker(filename)
         worker.returned.connect(self.show_umap)
 
         return worker
 
-
-def set_width(widget):
-    widget.max_height= 100
-
-@magic_factory(
-    call_button="Load",
-    filename={'label': 'Path to UMAP:',
-              'filter': '*.tumap'},
-    widget_init=set_width
-)
-def load_umap_magic(
-        filename: pathlib.Path
-):
-
-    if filename.suffix not in ['.tumap']:
-        notifications.show_error("UMAP is not specificed")
-        return
-    tool = LoadUmapTool()
-    tool.set_new_label_layer_name("UMAP")
-    worker = tool.start_umap_worker(filename)
-    worker.start()
 
 
 
