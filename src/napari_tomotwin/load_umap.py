@@ -1,4 +1,6 @@
+import os
 import pathlib
+from functools import partial
 from typing import List
 
 import napari
@@ -9,15 +11,13 @@ from matplotlib.patches import Circle
 from napari.qt.threading import thread_worker
 from napari.utils import notifications
 from napari_clusters_plotter._plotter_utilities import estimate_number_bins
-from napari_clusters_plotter._plotter import PlotterWidget
-from qtpy.QtGui import QGuiApplication  # pylint: disable=E0611
-import os
+from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
+from napari_tomotwin.anchor_tool import drag_circle_callback
 from qtpy.QtWidgets import (
     QFileDialog,
     QMessageBox,
-    QProgressBar
+
 )
-from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 
 
 class LoadUmapTool:
@@ -30,7 +30,7 @@ class LoadUmapTool:
         self.circles: List[Circle] = []
         self.viewer = napari.current_viewer()
         self.label_layer_name: str = "Label layer"
-        self.anchor_tool = None
+        self.viewer.mouse_drag_callbacks.append(partial(drag_circle_callback, self.plotter_widget))
 
     def set_new_label_layer_name(self, name: str):
         self.label_layer_name = name
@@ -199,10 +199,6 @@ class LoadUmapTool:
             "umap_path": filename,
             "embeddings_path": self.umap.attrs['embeddings_path']
         }
-
-        from napari_tomotwin.anchor_tool import AnchorTool
-        AnchorTool(self.plotter_widget, self.umap, lbl_layer)
-
 
         return lbl_layer
 
