@@ -152,6 +152,7 @@ class UmapToolQt(QWidget):
         self.layout().addRow("", self._load_umap_btn)
         self.plotter_widget: PlotterWidget = None
         self.plotter_Widget_dock = None
+        self.nvidia_available=True
         self.load_umap_tool: LoadUmapTool
 
         def load_umap_btn_clicked():
@@ -174,7 +175,8 @@ class UmapToolQt(QWidget):
             self.load_umap_tool = LoadUmapTool(pbar=self.progressBar, plotter_widget=self.plotter_widget)
 
             self.progressBar.setHidden(False)
-            self._run_umap_recalc_btn.setEnabled(True)
+            if self.nvidia_available:
+                self._run_umap_recalc_btn.setEnabled(True)
             self.load_umap_tool.set_new_label_layer_name("UMAP")
             worker = self.load_umap_tool.start_umap_worker(self._selected_umap_pth.text())
             worker.start()
@@ -190,6 +192,7 @@ class UmapToolQt(QWidget):
         self._run_umap_recalc_btn.clicked.connect(self._on_refine_click)
         self._run_umap_recalc_btn.setEnabled(False)
         if not self.check_if_gpu_is_available():
+            self.nvidia_available = False
             self._run_umap_recalc_btn.setEnabled(False)
             self._run_umap_recalc_btn.setToolTip("No NVIDIA GPU available")
         self.layout().addRow("", self._run_umap_recalc_btn)
