@@ -31,6 +31,7 @@ class LoadUmapTool:
         self.viewer = napari.current_viewer()
         self.label_layer_name: str = "Label layer"
         self.viewer.mouse_drag_callbacks.append(partial(drag_circle_callback, self.plotter_widget))
+        self.created_layers = []
 
     def set_new_label_layer_name(self, name: str):
         self.label_layer_name = name
@@ -81,6 +82,8 @@ class LoadUmapTool:
 
         label_layer.opacity = 0
         label_layer.visible = True
+        self.created_layers.append(label_layer)
+
 
         try:
             # napari-clusters-plotter > 0.7.4
@@ -108,6 +111,9 @@ class LoadUmapTool:
 
         except:
             pass
+
+    def get_created_layers(self) -> List[any]:
+        return self.created_layers
 
     def create_embedding_mask(self, umap: pd.DataFrame, values: np.array) -> np.array:
         """

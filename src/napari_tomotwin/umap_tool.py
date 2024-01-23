@@ -153,7 +153,7 @@ class UmapToolQt(QWidget):
         self.layout().addRow("", self._load_umap_btn)
         self.plotter_widget: PlotterWidget = None
         self.plotter_Widget_dock = None
-        self.umap_tool: LoadUmapTool
+        self.load_umap_tool: LoadUmapTool
 
         def load_umap_btn_clicked():
             if self.plotter_widget is not None:
@@ -161,18 +161,23 @@ class UmapToolQt(QWidget):
                 if ret == QMessageBox.No:
                     return
                 self.viewer.window.remove_dock_widget(self.plotter_Widget_dock)
+                for l in self.load_umap_tool.get_created_layers():
+                    self.plotter_widget.layer_select.changed.disconnect() # otherwise I an emit loop error
+                    self.viewer.layers.remove(l)
+
+
 
             self.plotter_Widget_dock, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
                                                                                widget_name='Plotter Widget',
                                                                                tabify=False)
 
 
-            self.umap_tool = LoadUmapTool(pbar=self.progressBar, plotter_widget=self.plotter_widget)
+            self.load_umap_tool = LoadUmapTool(pbar=self.progressBar, plotter_widget=self.plotter_widget)
 
             self.progressBar.setHidden(False)
             self._run_umap_recalc_btn.setEnabled(True)
-            self.umap_tool.set_new_label_layer_name("UMAP")
-            worker = self.umap_tool.start_umap_worker(self._selected_umap_pth.text())
+            self.load_umap_tool.set_new_label_layer_name("UMAP")
+            worker = self.load_umap_tool.start_umap_worker(self._selected_umap_pth.text())
             worker.start()
 
         self._load_umap_btn.clicked.connect(load_umap_btn_clicked)
@@ -217,7 +222,7 @@ class UmapToolQt(QWidget):
         self.plotter_widget = widget
 
     def set_umap_tool(self, tool: LoadUmapTool):
-        self.umap_tool = tool
+        self.load_umap_tool = tool
 
     def _on_refine_click(self):
        self.reestimate_umap()
@@ -235,8 +240,8 @@ class UmapToolQt(QWidget):
         umap_embeddings.to_pickle(tmp_umap_pth)
 
         # Visualizse it
-        self.umap_tool.set_new_label_layer_name("UMAP Refined")
-        worker = self.umap_tool.start_umap_worker(tmp_umap_pth)
+        self.load_umap_tool.set_new_label_layer_name("UMAP Refined")
+        worker = self.load_umap_tool.start_umap_worker(tmp_umap_pth)
         worker.start()
 
         self.progressBar.setHidden(True)
