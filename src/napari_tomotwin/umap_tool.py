@@ -162,7 +162,7 @@ class UmapToolQt(QWidget):
                     return
                 self.viewer.window.remove_dock_widget(self.plotter_Widget_dock)
                 for l in self.load_umap_tool.get_created_layers():
-                    self.plotter_widget.layer_select.changed.disconnect() # otherwise I an emit loop error
+                    self.plotter_widget.layer_select.changed.disconnect() # otherwise I get an emit loop error
                     self.viewer.layers.remove(l)
 
 
