@@ -261,7 +261,6 @@ class UmapToolQt(QWidget):
     def _on_show_target_clicked(self):
 
         # get embeddings
-        print("EMB:", )
         embeddings = pd.read_pickle(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'] )
         embeddings = embeddings.drop(columns=["level_0", "index"], errors="ignore")
 
@@ -271,6 +270,7 @@ class UmapToolQt(QWidget):
 
         # calculate target positions
         _, _, target_locations = _make_targets(embeddings=embeddings,clusters=clusters,avg_func=_get_medoid_embedding)
+
 
         # Create points layer with circles corresponding to cluster color
         colors = get_nice_colormap()
