@@ -239,13 +239,11 @@ class UmapToolQt(QWidget):
             pass
 
     def patched_run(self, *args, **kwargs):
-        print("Patched run")
         result = self.plotter_widget_run_func(*args, **kwargs)
         try:
             # The target points layer should get deleted when clusters are reseted
             # Furthermore, the button to calculate the targest should get disabled
             clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
-            print(np.unique(clusters))
             if len(np.unique(clusters)) == 1: # 1=only background cluster
                 self.delete_points_layer()
                 self._run_show_targets.setEnabled(False)
@@ -387,13 +385,16 @@ class UmapToolQt(QWidget):
 
         self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'] = emb_pth
         embeddings = pd.read_pickle(emb_pth)
-        ppe = futures.ProcessPoolExecutor(max_workers=1)
-        f= ppe.submit(UmapRefiner.refine, clusters,embeddings)
-        ppe.shutdown(wait=False)
+
         self.progressBar.setHidden(False)
         self.progressBar.set_label_text("Recalculate umap")
 
         # this workaround using signal is necessary, as "add_done_callback" starts the method
         # in a separate thread, but to change Qt elements, it must be run in the same thread as the main program.
-
+        ppe = futures.ProcessPoolExecutor(max_workers=1)
+        f= ppe.submit(UmapRefiner.refine, clusters,embeddings)
+        ppe.shutdown(wait=False)
         f.add_done_callback(self.refinement_done.emit)
+
+
+
