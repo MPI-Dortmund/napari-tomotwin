@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 from napari.utils import notifications
 from napari_clusters_plotter._plotter import PlotterWidget
+from napari_clusters_plotter._utilities import get_nice_colormap
+from napari_tomotwin.make_targets import _make_targets, _get_medoid_embedding
 from napari_tomotwin.load_umap import LoadUmapTool
 from numpy.typing import ArrayLike
 from qtpy.QtWidgets import QApplication
@@ -151,6 +153,7 @@ class UmapToolQt(QWidget):
         self.layout().addRow("Path to UMAP:", umap_pth_layout)
         self.layout().addRow("", self._load_umap_btn)
         self.plotter_widget: PlotterWidget = None
+        self.plotter_widget_run_func = None
         self.plotter_Widget_dock = None
         self.nvidia_available=True
         self.load_umap_tool: LoadUmapTool
@@ -172,11 +175,12 @@ class UmapToolQt(QWidget):
                                                                                tabify=False)
 
 
+
             self.load_umap_tool = LoadUmapTool(pbar=self.progressBar, plotter_widget=self.plotter_widget)
 
             self.progressBar.setHidden(False)
-            if self.nvidia_available:
-                self._run_umap_recalc_btn.setEnabled(True)
+            self.plotter_widget_run_func = self.plotter_widget.run
+            self.plotter_widget.run=self.patched_run
             self.load_umap_tool.set_new_label_layer_name("UMAP")
             worker = self.load_umap_tool.start_umap_worker(self._selected_umap_pth.text())
             worker.start()
@@ -191,23 +195,39 @@ class UmapToolQt(QWidget):
         self._run_umap_recalc_btn = QPushButton("Recalculate UMAP for selected clusters", self)
         self._run_umap_recalc_btn.clicked.connect(self._on_refine_click)
         self._run_umap_recalc_btn.setEnabled(False)
+        self._run_umap_recalc_btn.setToolTip("Takes the embeddings assigned to a cluster and calculates a new UMAP based on these embeddings. This can be helpful to pinpoint the region that encodes the center of the protein or to clean clusters from unwanted embeddings.")
         if not self.check_if_gpu_is_available():
             self.nvidia_available = False
             self._run_umap_recalc_btn.setEnabled(False)
             self._run_umap_recalc_btn.setToolTip("No NVIDIA GPU available")
         self.layout().addRow("", self._run_umap_recalc_btn)
 
+
+        self.refinement_done.connect(self.show_umap_callback)
+
+
+        ####
+        # Show target embedding position
+        ####
+        self._run_show_targets= QPushButton("Show target embedding positions", self)
+        self._run_show_targets.clicked.connect(self._on_show_target_clicked)
+        self._run_show_targets.setEnabled(False)
+        self._run_show_targets.setToolTip("For each cluster, it estimates the target embedding (medoid) and visualizes its position in the tomogram with the same edge color as the cluster.")
+        self.layout().addRow("", self._run_show_targets)
+
+
+        ###
+        # Other
+        ###
         self.pbar_label = QLabel("")
         self.progressBar = LabeledProgressBar(self.pbar_label)
 
         self.progressBar.setRange(0, 0)
         self.progressBar.hide()
         self.layout().addRow(self.pbar_label,self.progressBar)
-
-        self.refinement_done.connect(self.show_umap_callback)
         self.tmp_dir_path: str
         self.setMaximumHeight(150)
-
+        self._target_point_layer = None
 
 
 
@@ -217,6 +237,76 @@ class UmapToolQt(QWidget):
         except AttributeError:
             # Means that the there was no recalculated UMAP
             pass
+
+    def patched_run(self, *args, **kwargs):
+        print("Patched run")
+        result = self.plotter_widget_run_func(*args, **kwargs)
+        try:
+            # The target points layer should get deleted when clusters are reseted
+            # Furthermore, the button to calculate the targest should get disabled
+            clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+            print(np.unique(clusters))
+            if len(np.unique(clusters)) == 1: # 1=only background cluster
+                self.delete_points_layer()
+                self._run_show_targets.setEnabled(False)
+                self._run_umap_recalc_btn.setEnabled(False)
+            else:
+                self._run_show_targets.setEnabled(True)
+                if self.nvidia_available:
+                    self._run_umap_recalc_btn.setEnabled(True)
+        except:
+            pass
+        return result
+
+    def _on_show_target_clicked(self):
+
+        # get embeddings
+        print("EMB:", )
+        embeddings = pd.read_pickle(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'] )
+        embeddings = embeddings.drop(columns=["level_0", "index"], errors="ignore")
+
+        # get clusters
+        clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+
+
+        # calculate target positions
+        _, _, target_locations = _make_targets(embeddings=embeddings,clusters=clusters,avg_func=_get_medoid_embedding)
+
+        # Create points layer with circles corresponding to cluster color
+        colors = get_nice_colormap()
+        point_colors = []
+        points = []
+        import PIL.ImageColor as ImageColor
+        for c in np.unique(clusters):
+            c = int(c)
+            if c == 0:
+                continue
+            rgba = [float(v) / 255
+                for v in list(
+                    ImageColor.getcolor(colors[c % len(colors)], "RGB")
+                )
+            ]
+            rgba.append(0.9)
+            point_colors.append(rgba)
+            points.append(target_locations[c][["Z","Y","X"]].drop(columns=["level_0", "index"], errors="ignore"))
+
+        points = pd.concat(points)
+
+        self._target_point_layer  = self.viewer.add_points(points,
+                                              symbol='o',
+                                              size=37,
+                                              edge_color=point_colors,
+                                              face_color="transparent",
+                                              out_of_slice_display=True,
+                                                           name="Targets")
+
+    def delete_points_layer(self):
+        if self._target_point_layer is not None:
+            self.viewer.layers.remove(self._target_point_layer)
+
+
+
+       # pass
     def on_close_callback(self):
         self.cleanup()
 
@@ -227,7 +317,8 @@ class UmapToolQt(QWidget):
         self.load_umap_tool = tool
 
     def _on_refine_click(self):
-       self.reestimate_umap()
+        self.delete_points_layer()
+        self.reestimate_umap()
 
     @staticmethod
     def random_filename() -> str:
@@ -260,7 +351,7 @@ class UmapToolQt(QWidget):
             if not np.any(clusters>0):
                 raise KeyError
         except KeyError:
-            notifications.show_info(f"Not cluster selected. Can't refine.")
+            notifications.show_info(f"No cluster selected. Can't refine.")
             return
 
         def get_embedding_path(pth: str) -> str:
@@ -285,9 +376,12 @@ class UmapToolQt(QWidget):
         print("Read embeddings")
         emb_pth = get_embedding_path(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'])
 
+
         if emb_pth == "":
-            print("Not path selected.")
+            print("No path selected.")
             return
+
+        self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'] = emb_pth
         embeddings = pd.read_pickle(emb_pth)
         ppe = futures.ProcessPoolExecutor(max_workers=1)
         f= ppe.submit(UmapRefiner.refine, clusters,embeddings)
