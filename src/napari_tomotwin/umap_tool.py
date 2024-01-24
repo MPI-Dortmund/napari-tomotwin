@@ -317,6 +317,7 @@ class UmapToolQt(QWidget):
         self.load_umap_tool = tool
 
     def _on_refine_click(self):
+        self.viewer.window._qt_window.setEnabled(False)
         self.delete_points_layer()
         self.reestimate_umap()
 
@@ -325,6 +326,7 @@ class UmapToolQt(QWidget):
         return next(tempfile._get_candidate_names())
 
     def napari_update_umap(self, umap_embeddings, used_embeddings):
+
         self.tmp_dir_path = tempfile.mkdtemp()
         tmp_embed_pth = os.path.join(self.tmp_dir_path, UmapToolQt.random_filename())
         used_embeddings.to_pickle(tmp_embed_pth)
@@ -336,12 +338,14 @@ class UmapToolQt(QWidget):
         self.load_umap_tool.set_new_label_layer_name("UMAP Refined")
         worker = self.load_umap_tool.start_umap_worker(tmp_umap_pth)
         worker.start()
+        #worker.finished.connect(lambda x,y: self.viewer.window._qt_window.setEnabled(True))
 
         self.progressBar.setHidden(True)
         self.progressBar.set_label_text("")
 
     def show_umap_callback(self, future: futures.Future):
         (umap_embeddings, used_embeddings) = future.result()
+        self.viewer.window._qt_window.setEnabled(True)
         self.napari_update_umap(umap_embeddings, used_embeddings)
 
     def reestimate_umap(self):
