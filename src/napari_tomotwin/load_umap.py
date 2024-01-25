@@ -72,8 +72,8 @@ class LoadUmapTool:
         if not valid:
             if self.pbar is not None:
                 self.pbar.hide()
-            import sys
-            sys.exit(1)
+            self.viewer.window._qt_window.setEnabled(True)
+            return
 
         label_layer.metadata['tomotwin']["embeddings_path"] = self.umap.attrs['embeddings_path'] #might have been updated while checking umap metadata
 
@@ -156,7 +156,7 @@ class LoadUmapTool:
     def check_umap_metadata(self) -> bool:
         def get_embedding_path(pth: str) -> str:
             '''
-            Checks if the embedding path exists. If it does not exist, it opens a file selection dialogue. Otherwise it returns the path.
+            Checks if the embedding path exists. If it does not exist, it opens a file selection dialogue. Otherwise, it returns the path.
             '''
             if not os.path.exists(pth):
                 msg = QMessageBox()
