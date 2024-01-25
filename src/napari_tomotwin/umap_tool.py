@@ -107,6 +107,7 @@ class UmapRefiner:
 class UmapToolQt(QWidget):
 
     refinement_done = Signal("PyQt_PyObject")
+    target_calc_done = Signal("PyQt_PyObject")
 
     @staticmethod
     def check_if_gpu_is_available() -> bool:
@@ -214,6 +215,7 @@ class UmapToolQt(QWidget):
         self._run_show_targets.setEnabled(False)
         self._run_show_targets.setToolTip("For each cluster, it estimates the target embedding (medoid) and visualizes its position in the tomogram with the same edge color as the cluster.")
         self.layout().addRow("", self._run_show_targets)
+        self.target_calc_done.connect(self.show_targets_callback)
 
 
         ###
@@ -256,51 +258,48 @@ class UmapToolQt(QWidget):
             pass
         return result
 
-    def _on_show_target_clicked(self):
-
+    @staticmethod
+    def calc_targets(embedding_path: str , clusters: np.array) -> pd.DataFrame:
         # get embeddings
-        embeddings = pd.read_pickle(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'] )
+        embeddings = pd.read_pickle(embedding_path)
         embeddings = embeddings.drop(columns=["level_0", "index"], errors="ignore")
 
         # get clusters
-        clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
 
 
         # calculate target positions
-        _, _, target_locations = _make_targets(embeddings=embeddings,clusters=clusters,avg_func=_get_medoid_embedding)
+        _, _, target_locations = _make_targets(embeddings=embeddings, clusters=clusters, avg_func=_get_medoid_embedding)
 
+        # Create points coords
 
-        # Create points layer with circles corresponding to cluster color
-        colors = get_nice_colormap()
-        point_colors = []
         points = []
-        import PIL.ImageColor as ImageColor
         for c in np.unique(clusters):
             c = int(c)
             if c == 0:
                 continue
-            rgba = [float(v) / 255
-                for v in list(
-                    ImageColor.getcolor(colors[c % len(colors)], "RGB")
-                )
-            ]
-            rgba.append(0.9)
-            point_colors.append(rgba)
-            points.append(target_locations[c][["Z","Y","X"]].drop(columns=["level_0", "index"], errors="ignore"))
+            points.append(target_locations[c][["Z", "Y", "X"]].drop(columns=["level_0", "index"], errors="ignore"))
 
         points = pd.concat(points)
+        return points
 
-        self._target_point_layer  = self.viewer.add_points(points,
-                                              symbol='o',
-                                              size=37,
-                                              edge_color=point_colors,
-                                              face_color="transparent",
-                                              out_of_slice_display=True,
-                                                           name="Targets")
+
+    def _on_show_target_clicked(self):
+        emb_pth = self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path']
+        clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+
+        self.progressBar.setHidden(False)
+        self.progressBar.set_label_text("Calculate target positions")
+
+        ppe = futures.ProcessPoolExecutor(max_workers=1)
+        f= ppe.submit(self.calc_targets, emb_pth, clusters)
+        ppe.shutdown(wait=False)
+        f.add_done_callback(self.target_calc_done.emit)
+
 
     def delete_points_layer(self):
         if self._target_point_layer is not None:
             self.viewer.layers.remove(self._target_point_layer)
+            self._target_point_layer = None
 
 
 
@@ -338,8 +337,37 @@ class UmapToolQt(QWidget):
         worker.start()
         #worker.finished.connect(lambda x,y: self.viewer.window._qt_window.setEnabled(True))
 
+
+    def show_targets_callback(self, future: futures.Future):
+        points: pd.DataFrame = future.result()
+        point_colors = []
+        colors = get_nice_colormap()
+        import PIL.ImageColor as ImageColor
+
+        for c in range(1,len(points)+1):
+            rgba = [float(v) / 255
+                    for v in list(
+                    ImageColor.getcolor(colors[c % len(colors)], "RGB")
+                )
+                    ]
+            rgba.append(0.9)
+            point_colors.append(rgba)
+
+        self.delete_points_layer()
+
+        self._target_point_layer = self.viewer.add_points(points,
+                                                          symbol='o',
+                                                          size=37,
+                                                          edge_color=point_colors,
+                                                          face_color="transparent",
+                                                          edge_width=0.10,
+                                                          out_of_slice_display=True,
+                                                          name="Targets")
+
+        self.viewer.window._qt_window.setEnabled(True)
         self.progressBar.setHidden(True)
         self.progressBar.set_label_text("")
+
 
     def show_umap_callback(self, future: futures.Future):
         (umap_embeddings, used_embeddings) = future.result()
