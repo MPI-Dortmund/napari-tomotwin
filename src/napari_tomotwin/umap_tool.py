@@ -160,6 +160,10 @@ class UmapToolQt(QWidget):
         self.load_umap_tool: LoadUmapTool
 
         def load_umap_btn_clicked():
+
+            if self._selected_umap_pth.text() == None or self._selected_umap_pth.text() == "":
+                return
+
             if self.plotter_widget is not None:
                 ret = QMessageBox.question(self, '', "Do you really want to close the current UMAP and load another?", QMessageBox.Yes | QMessageBox.No)
                 if ret == QMessageBox.No:
@@ -254,7 +258,7 @@ class UmapToolQt(QWidget):
                 self._run_show_targets.setEnabled(True)
                 if self.nvidia_available:
                     self._run_umap_recalc_btn.setEnabled(True)
-        except:
+        except Exception as e:
             pass
         return result
 
