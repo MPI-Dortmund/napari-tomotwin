@@ -298,7 +298,11 @@ class UmapToolQt(QWidget):
 
     def delete_points_layer(self):
         if self._target_point_layer is not None:
-            self.viewer.layers.remove(self._target_point_layer)
+            try:
+                self.viewer.layers.remove(self._target_point_layer)
+            except ValueError:
+                # Then it somehow got deleted
+                pass
             self._target_point_layer = None
 
 
