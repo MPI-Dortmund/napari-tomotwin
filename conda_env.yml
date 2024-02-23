@@ -13,8 +13,11 @@ dependencies:
   - matplotlib
   - scipy
   - scikit-learn
-  - napari-clusters-plotter
+  - napari-boxmanager
   - tqdm
   - mrcfile
   - cuml=23.12
   - cuda-version=11.8
+  - git
+  - pip:
+      - git+https://github.com/BiAPoL/napari-clusters-plotter.git@b9b08f3500c9b0831d2cd1b4d9a757c688f76005
