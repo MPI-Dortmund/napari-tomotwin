@@ -1,57 +1,55 @@
+import os
 import pathlib
+from functools import partial
 from typing import List
 
 import napari
 import numpy as np
 import pandas as pd
-from magicgui import magic_factory
-from magicgui.tqdm import tqdm
+from magicgui.tqdm import tqdm as mtqdm
 from matplotlib.patches import Circle
 from napari.qt.threading import thread_worker
 from napari.utils import notifications
 from napari_clusters_plotter._plotter_utilities import estimate_number_bins
-from qtpy.QtCore import Qt
-from qtpy.QtGui import QGuiApplication  # pylint: disable=E0611
+from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
+from napari_tomotwin.anchor_tool import drag_circle_callback
+from qtpy.QtWidgets import (
+    QFileDialog,
+    QMessageBox,
+
+)
 
 
 class LoadUmapTool:
 
-    def __init__(self):
+    def __init__(self, pbar: LabeledProgressBar, plotter_widget = None):
 
         self.umap = None
-        self.plotter_widget = None
-        self.pbar = None
+        self.plotter_widget = plotter_widget
+        self.pbar = pbar
         self.circles: List[Circle] = []
         self.viewer = napari.current_viewer()
+        self.label_layer_name: str = "Label layer"
+        self.viewer.mouse_drag_callbacks.append(partial(drag_circle_callback, self.plotter_widget))
+        self.created_layers = []
 
-    def _draw_circle(self, data_coordinates, label_layer, umap):
-        '''
-        Adds a circle on the umap when you click on the image
-        '''
-        label_layer.visible = True
-        val = label_layer._get_value(data_coordinates)
+    def set_new_label_layer_name(self, name: str):
+        self.label_layer_name = name
 
-        umap_coordinates = umap.loc[
-            umap['label'] == val, [self.plotter_widget.plot_x_axis.currentText(), self.plotter_widget.plot_y_axis.currentText()]]
-
+    def update_progress_bar(self,text: str) -> None:
         try:
-            center = umap_coordinates.values.tolist()[0]
-        except IndexError:
-            return
-        modifiers = QGuiApplication.keyboardModifiers()
-        if modifiers == Qt.ShiftModifier:
-            pass
-        else:
-            for c in self.circles[::-1]:
-                c.remove()
-            self.circles = []
-        col = '#40d5aa'
-        if self.plotter_widget.log_scale.isChecked():
-            col = '#79abfd'
-        circle = Circle(tuple(center), 0.5, fill=False, color=col)
-        self.circles.append(circle)
-        self.plotter_widget.graphics_widget.axes.add_patch(circle)
-        self.plotter_widget.graphics_widget.draw_idle()
+            if self.pbar is not None:
+                self.pbar.set_label_text(text)
+        except AttributeError:
+            print("Can't initialize progress bar")
+
+    def hide_progress_bar(self) -> None:
+        try:
+            self.pbar.setHidden(True)
+        except AttributeError:
+            print("Can't hide progress bar. Not initialized")
+
+
 
     @thread_worker()
     def run_clusters_plotter(self, plotter_widget,
@@ -68,21 +66,24 @@ class LoadUmapTool:
 
 
     def show_umap(self, label_layer):
-        self.pbar.progressbar.label = "Visualize umap"
-        self.viewer.add_layer(label_layer)
-        widget, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
-                                                                      widget_name='Plotter Widget',
-                                                                      tabify=False)
 
-        #label_layer = self.viewer.add_labels(lbl_data, name='Label layer', features=self.umap, properties=self.umap)
+        valid = self.check_umap_metadata()
+
+        if not valid:
+            if self.pbar is not None:
+                self.pbar.hide()
+            self.viewer.window._qt_window.setEnabled(True)
+            return
+
+        label_layer.metadata['tomotwin']["embeddings_path"] = self.umap.attrs['embeddings_path'] #might have been updated while checking umap metadata
+
+        self.update_progress_bar("Visualize umap")
+        self.viewer.add_layer(label_layer)
 
         label_layer.opacity = 0
         label_layer.visible = True
+        self.created_layers.append(label_layer)
 
-        @self.viewer.mouse_drag_callbacks.append
-        def get_event(viewer, event):
-            data_coordinates = label_layer.world_to_data(event.position)
-            self._draw_circle(data_coordinates, label_layer, self.umap)
 
         try:
             # napari-clusters-plotter > 0.7.4
@@ -98,24 +99,23 @@ class LoadUmapTool:
         self.plotter_widget.plot_hide_non_selected.setChecked(True)
         self.plotter_widget.setDisabled(True)
 
-        def activate_plotter_widget():
-            self.plotter_widget.setEnabled(True)
-
         try:
-            # Needs to run in a seperate thread, otherweise it freezes when it is loading the umap
-
+            # Needs to run in a separate thread, otherwise it freezes when it is loading the umap
             worker = self.run_clusters_plotter(self.plotter_widget, features=self.umap, plot_x_axis_name="umap_0",
                                           plot_y_axis_name="umap_1", plot_cluster_name=None,
                                           force_redraw=True)  # create "worker" object
-            worker.returned.connect(activate_plotter_widget)
-            worker.finished.connect(lambda: self.pbar.progressbar.hide())
+            worker.returned.connect(lambda x: self.plotter_widget.setEnabled(True))
+            worker.finished.connect(self.hide_progress_bar)
             worker.finished.connect(lambda: napari.current_viewer().window._qt_window.setEnabled(True))
             worker.start()
 
         except:
             pass
 
-    def create_embedding_mask(self, umap: pd.DataFrame, values: np.array):
+    def get_created_layers(self) -> List[any]:
+        return self.created_layers
+
+    def create_embedding_mask(self, umap: pd.DataFrame, values: np.array) -> np.array:
         """
         Creates mask where each individual subvolume of the running windows gets an individual ID
         """
@@ -130,7 +130,7 @@ class LoadUmapTool:
         x = np.array(umap["X"], dtype=int)
 
         # values = np.array(range(1, len(x) + 1))
-        for stride_x in tqdm(list(range(stride))):
+        for stride_x in mtqdm(list(range(stride))):
             for stride_y in range(stride):
                 for stride_z in range(stride):
                     index = (z + stride_z, y + stride_y, x + stride_x)
@@ -153,23 +153,52 @@ class LoadUmapTool:
         lbl_data = self.create_embedding_mask(self.umap, new_lbl).astype(np.int64)
         return lbl_data
 
-    def load_umap(self, filename: pathlib.Path):
-        if self.pbar is not None:
-            self.pbar.progressbar.label = "Read umap"
-        self.umap = pd.read_pickle(filename)
+    def check_umap_metadata(self) -> bool:
+        def get_embedding_path(pth: str) -> str:
+            '''
+            Checks if the embedding path exists. If it does not exist, it opens a file selection dialogue. Otherwise, it returns the path.
+            '''
+            if not os.path.exists(pth):
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Critical)
+                msg.setWindowTitle("Can't open embedding file")
+                msg.setText("Can't open embedding file")
+                msg.setInformativeText(
+                    "The embedding path in the metadata (see below) doesn't exist or can't be accessed, click OK and select the path to the embedding file.")
+                msg.setDetailedText(pth)
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec_()
+                pth = QFileDialog.getOpenFileName(napari.current_viewer().window._qt_window, 'Open embedding file',
+                                                  os.getcwd(),
+                                                  "Embedding file (*.temb)")[0]
+
+            return pth
+
         if 'embeddings_attrs' not in self.umap.attrs:
             napari.utils.notifications.show_error(
                 "The umap was calculated with an old version of TomoTwin. Please update TomoTwin and re-estimate the umap.")
-            if self.pbar is not None:
-                self.pbar.progressbar.hide()
-            import sys
-            sys.exit(1)
-        if self.pbar is not None:
-            self.pbar.progressbar.label = "Generate label layer"
+            return False
+
+        emb_path = get_embedding_path(self.umap.attrs['embeddings_path'])
+
+        if emb_path == "":
+            return False
+
+        self.umap.attrs['embeddings_path'] = emb_path # overwrite in case it was updated
+
+        return True
+
+
+    def load_umap(self, filename: pathlib.Path):
+        self.update_progress_bar("Read umap")
+        self.umap = pd.read_pickle(filename)
+        self.update_progress_bar("Generate label layer")
+
+
         lbl_data = self.relabel_and_update()
         from napari.layers import Layer
         lbl_layer = Layer.create(lbl_data, {
-            "name": "Label layer"}, layer_type="Labels")
+            "name": self.label_layer_name}, layer_type="Labels")
         lbl_layer.features = self.umap
         lbl_layer.properties = self.umap
         lbl_layer.metadata['tomotwin'] = {
@@ -184,8 +213,6 @@ class LoadUmapTool:
         return self.load_umap(filename)
 
     def start_umap_worker(self, filename: pathlib.Path):
-        self.pbar = tqdm()
-
         napari.current_viewer().window._qt_window.setEnabled(False)
         worker = self._load_umap_worker(filename)
         worker.returned.connect(self.show_umap)
@@ -193,25 +220,6 @@ class LoadUmapTool:
         return worker
 
 
-def set_width(widget):
-    widget.max_height= 100
-
-@magic_factory(
-    call_button="Load",
-    filename={'label': 'Path to UMAP:',
-              'filter': '*.tumap'},
-    widget_init=set_width
-)
-def load_umap_magic(
-        filename: pathlib.Path
-):
-
-    if filename.suffix not in ['.tumap']:
-        notifications.show_error("UMAP is not specificed")
-        return
-    tool = LoadUmapTool()
-    worker = tool.start_umap_worker(filename)
-    worker.start()
 
 
 

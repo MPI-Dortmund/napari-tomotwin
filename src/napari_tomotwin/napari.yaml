@@ -2,14 +2,18 @@ name: napari-tomotwin
 display_name: TomoTwin
 contributions:
   commands:
-    - id: napari-tomotwin.load_umap_magic
-      python_name: napari_tomotwin.load_umap:load_umap_magic
-      title: TomoTwin Load Umap
     - id: napari-tomotwin.make_targets
       python_name: napari_tomotwin.make_targets:make_targets
       title: Save targets after clustering
+    - id: napari-tomotwin.RefineUmap
+      python_name: napari_tomotwin.recursive_umap:UmapRefinerQt
+      title: Refine umap
+    - id: napari-tomotwin.UmapTool
+      python_name: napari_tomotwin.umap_tool:UmapToolQt
+      title: Refine umap
   widgets:
-    - command: napari-tomotwin.load_umap_magic
+    - command: napari-tomotwin.UmapTool
       display_name: Cluster UMAP embeddings
     - command: napari-tomotwin.make_targets
       display_name: Save cluster targets
+
