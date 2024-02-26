@@ -322,7 +322,7 @@ class UmapToolQt(QWidget):
         self.load_umap_tool = tool
 
     def _on_refine_click(self):
-        self.viewer.window.setEnabled(False)
+        self.viewer.window._qt_window.setEnabled(False)
         self.delete_points_layer()
         self.reestimate_umap()
 
@@ -372,14 +372,14 @@ class UmapToolQt(QWidget):
                                                           out_of_slice_display=True,
                                                           name="Targets")
 
-        self.viewer.window.setEnabled(True)
+        self.viewer.window._qt_window.setEnabled(True)
         self.progressBar.setHidden(True)
         self.progressBar.set_label_text("")
 
 
     def show_umap_callback(self, future: futures.Future):
         (umap_embeddings, used_embeddings) = future.result()
-        self.viewer.window.setEnabled(True)
+        self.viewer.window._qt_window.setEnabled(True)
         self.viewer.window.set
         self.napari_update_umap(umap_embeddings, used_embeddings)
 
