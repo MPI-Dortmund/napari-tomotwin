@@ -160,6 +160,10 @@ class UmapToolQt(QWidget):
         self.load_umap_tool: LoadUmapTool
 
         def load_umap_btn_clicked():
+
+            if self._selected_umap_pth.text() == None or self._selected_umap_pth.text() == "":
+                return
+
             if self.plotter_widget is not None:
                 ret = QMessageBox.question(self, '', "Do you really want to close the current UMAP and load another?", QMessageBox.Yes | QMessageBox.No)
                 if ret == QMessageBox.No:
@@ -254,7 +258,7 @@ class UmapToolQt(QWidget):
                 self._run_show_targets.setEnabled(True)
                 if self.nvidia_available:
                     self._run_umap_recalc_btn.setEnabled(True)
-        except:
+        except Exception as e:
             pass
         return result
 
@@ -318,7 +322,7 @@ class UmapToolQt(QWidget):
         self.load_umap_tool = tool
 
     def _on_refine_click(self):
-        self.viewer.window._qt_window.setEnabled(False)
+        self.viewer.window.setEnabled(False)
         self.delete_points_layer()
         self.reestimate_umap()
 
@@ -368,14 +372,15 @@ class UmapToolQt(QWidget):
                                                           out_of_slice_display=True,
                                                           name="Targets")
 
-        self.viewer.window._qt_window.setEnabled(True)
+        self.viewer.window.setEnabled(True)
         self.progressBar.setHidden(True)
         self.progressBar.set_label_text("")
 
 
     def show_umap_callback(self, future: futures.Future):
         (umap_embeddings, used_embeddings) = future.result()
-        self.viewer.window._qt_window.setEnabled(True)
+        self.viewer.window.setEnabled(True)
+        self.viewer.window.set
         self.napari_update_umap(umap_embeddings, used_embeddings)
 
     def reestimate_umap(self):
