@@ -380,7 +380,6 @@ class UmapToolQt(QWidget):
     def show_umap_callback(self, future: futures.Future):
         (umap_embeddings, used_embeddings) = future.result()
         self.viewer.window._qt_window.setEnabled(True)
-        self.viewer.window.set
         self.napari_update_umap(umap_embeddings, used_embeddings)
 
     def reestimate_umap(self):
