@@ -14,7 +14,7 @@ import pandas as pd
 from napari.utils import notifications
 from napari_clusters_plotter._plotter import PlotterWidget
 from napari_clusters_plotter._utilities import get_nice_colormap
-from napari_tomotwin.make_targets import _make_targets, _get_medoid_embedding
+from napari_tomotwin.make_targets_widget import _make_targets, _get_medoid_embedding
 from napari_tomotwin.load_umap import LoadUmapTool
 from numpy.typing import ArrayLike
 from qtpy.QtWidgets import QApplication
@@ -178,6 +178,12 @@ class UmapToolQt(QWidget):
             self.plotter_Widget_dock, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
                                                                                widget_name='Plotter Widget',
                                                                                tabify=False)
+
+            self.cluster_widget_dock, self.cluster_widget = self.viewer.window.add_plugin_dock_widget(
+                'napari-tomotwin',
+                widget_name='ClusterTool',
+                tabify=True)
+            self.cluster_widget.set_plotter_widget(self.plotter_widget)
 
 
 

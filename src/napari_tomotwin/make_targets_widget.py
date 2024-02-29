@@ -11,7 +11,11 @@ from napari.qt.threading import thread_worker
 from napari.utils import notifications
 from sklearn.metrics.pairwise import pairwise_distances
 
+
 global pbar
+
+
+
 
 def get_non_numeric_column_titles(df: pd.DataFrame):
 
