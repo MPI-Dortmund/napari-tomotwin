@@ -67,6 +67,7 @@ class ClusteringWidgetQt(QWidget):
         self.load_umap_tool: LoadUmapTool
         self.tmp_dir_path: str = None
         self.progressbar = LabeledProgressBar(QLabel(""))
+        self.added_canditates : int = 0
 
 
         #######
@@ -126,6 +127,7 @@ class ClusteringWidgetQt(QWidget):
         ## Add candidate buttons
         add_candidiate_layout = QHBoxLayout()
         self._add_candidate = QPushButton("Add candidate", self)
+        self._add_candidate.setEnabled(False)
         self._add_candidate.clicked.connect(self.add_candidate)
         self._candidate_dropdown = self.get_current_cluster_dropdown()
         add_candidiate_layout.addWidget(self._candidate_dropdown)
@@ -196,19 +198,21 @@ class ClusteringWidgetQt(QWidget):
 
         current_row_count = self.tableWidget.rowCount()
         self.tableWidget.setRowCount(current_row_count + 1)
-
+        self.added_canditates = self.added_canditates +1
         c = self._candidate_dropdown.currentIndex()+1
-
-        entry = ["","",self.plotter_widget.layer_select.value.name, "Lorem ipsum"]
+        entry = ["","",self.plotter_widget.layer_select.value.name, f"target-{self.added_canditates}"]
         for col, value in enumerate(entry):
             item = QTableWidgetItem(value)
             if col == 0:
                 item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                 item.setCheckState(Qt.Checked)
             if col == 1:
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 pixmap = QPixmap(10, 10)
                 pixmap.fill(QColor(*self.index_to_rgba(c)))
                 item.setData(Qt.DecorationRole, pixmap)
+            if col == 2:
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
             self.tableWidget.setItem(current_row_count, col, item)
 
