@@ -140,6 +140,7 @@ class ClusteringWidgetQt(QWidget):
         self.save = QPushButton("Save candidates", self)
         self.save.clicked.connect(self.update_all)
         self.delete = QPushButton("Delete candidates", self)
+        self.delete.clicked.connect(self.delete_candidate)
         save_delete_layout.addWidget(self.delete)
         save_delete_layout.addWidget(self.save)
         self.layout().addRow("", save_delete_layout)
@@ -159,6 +160,15 @@ class ClusteringWidgetQt(QWidget):
         self.plotter_widget = plotter_widget
         self.plotter_widget_run_func = self.plotter_widget.run
         self.plotter_widget.graphics_widget.mpl_connect('draw_event', lambda _ : self.after_draw_event())
+
+    def delete_candidate(self):
+        if self.tableWidget.currentItem() is None:
+            return
+        selected_row = self.tableWidget.currentRow()
+        if selected_row >= 0:
+            self.tableWidget.removeRow(selected_row)
+            self.tableWidget.clearSelection()
+            self.tableWidget.setCurrentItem(None)
 
     def after_draw_event(self):
         self.update_all()
