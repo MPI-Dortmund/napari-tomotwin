@@ -1,3 +1,5 @@
+import shutil
+
 import numpy as np
 from PyQt5.QtWidgets import QComboBox, QStyledItemDelegate, QFrame
 from napari.utils import notifications
@@ -63,6 +65,7 @@ class ClusteringWidgetQt(QWidget):
         self.viewer = napari_viewer
         self.plotter_widget: PlotterWidget
         self.load_umap_tool: LoadUmapTool
+        self.tmp_dir_path: str = None
         self.progressbar = LabeledProgressBar(QLabel(""))
 
 
@@ -70,8 +73,8 @@ class ClusteringWidgetQt(QWidget):
         # UI Setup
         ######
         layout = QFormLayout()
-        #app = QApplication.instance()
-        #app.lastWindowClosed.connect(self.on_close_callback)  # this line is connection to signal
+        app = QApplication.instance()
+        app.lastWindowClosed.connect(self.on_close_callback)  # this line is connection to signal
         layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         self.setLayout(layout)
 
@@ -79,8 +82,18 @@ class ClusteringWidgetQt(QWidget):
         recalc_layout = QHBoxLayout()
         self._recalc_umap = QPushButton("Recalculate UMAP", self)
         self._recalc_umap.clicked.connect(self._on_refine_click)
+        self._recalc_umap.setEnabled(False)
+        self._recalc_umap.setToolTip(
+            "Takes the embeddings assigned to a cluster and calculates a new UMAP based on these embeddings. This can be helpful to pinpoint the region that encodes the center of the protein or to clean clusters from unwanted embeddings.")
+        self.nvidia_available = self.check_if_gpu_is_available()
+        if not self.nvidia_available:
+            self.nvidia_available = False
+            self._recalc_umap.setEnabled(False)
+            self._recalc_umap.setToolTip("No NVIDIA GPU available")
         self.refinement_done.connect(self.show_umap_callback)
         self._cluster_dropdown = self.get_current_cluster_dropdown()
+        #self._cluster_dropdown.currentIndexChanged.connect(lambda _: self._recalc_umap.setEnabled(self._cluster_dropdown.count()>0) )
+
         self._show_targets = QPushButton("Show targets", self)
 
 
@@ -130,11 +143,54 @@ class ClusteringWidgetQt(QWidget):
         self.layout().addRow("", save_delete_layout)
         self.layout().addWidget(self.progressbar)
 
+    @staticmethod
+    def check_if_gpu_is_available() -> bool:
+        try:
+            import cudf
+            import cuml
+        except:
+            return False
+        return True
+
+
     def set_plotter_widget(self, plotter_widget: PlotterWidget):
         self.plotter_widget = plotter_widget
+        self.plotter_widget_run_func = self.plotter_widget.run
+        self.plotter_widget.graphics_widget.mpl_connect('draw_event', lambda _ : self.after_draw_event())
+
+    def after_draw_event(self):
+        self.update_all()
+        try:
+            # The target points layer should get deleted when clusters are reseted
+            # Furthermore, the button to calculate the targest should get disabled
+            clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+            if len(np.unique(clusters)) == 1: # 1=only background cluster
+                #self.delete_points_layer()
+                #self._run_show_targets.setEnabled(False)
+                self._recalc_umap.setEnabled(False)
+                self._add_candidate.setEnabled(False)
+            else:
+                #self._run_show_targets.setEnabled(True)
+                if self.nvidia_available:
+                    self._recalc_umap.setEnabled(True)
+                self._add_candidate.setEnabled(True)
+
+        except Exception as e:
+            pass
 
     def set_umap_tool(self, umap_tool: LoadUmapTool):
         self.load_umap_tool = umap_tool
+
+
+    def cleanup(self):
+        try:
+            shutil.rmtree(self.tmp_dir_path)
+        except AttributeError:
+            # Means that the there was no recalculated UMAP
+            pass
+
+    def on_close_callback(self):
+        self.cleanup()
 
     def add_candidate(self):
 
@@ -169,8 +225,10 @@ class ClusteringWidgetQt(QWidget):
         self.load_umap_tool.set_new_label_layer_name("UMAP Refined")
         worker = self.load_umap_tool.start_umap_worker(tmp_umap_pth)
         worker.start()
+        #worker.returned.connect(self.update_all)
 
     def show_umap_callback(self, future: futures.Future):
+        print("SHOW")
         (umap_embeddings, used_embeddings) = future.result()
         self.viewer.window._qt_window.setEnabled(True)
         self.napari_update_umap(umap_embeddings, used_embeddings)
@@ -187,10 +245,12 @@ class ClusteringWidgetQt(QWidget):
         rgba.append(int(255 * 0.9))
         return rgba
     def update_all(self):
-
-        self.update_items_cluster_dropdown(self._cluster_dropdown, self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID'])
-        self.update_items_cluster_dropdown(self._candidate_dropdown,
-                                           self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID'])
+        print("Update all", self.plotter_widget.layer_select.value.name)
+        cls = []
+        if 'MANUAL_CLUSTER_ID' in self.plotter_widget.layer_select.value.features:
+            cls = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+        self.update_items_cluster_dropdown(self._cluster_dropdown, cls)
+        self.update_items_cluster_dropdown(self._candidate_dropdown,cls)
 
     def update_items_cluster_dropdown(self, dropdown : QComboBox, cluster_ids: list[int]):
 
@@ -213,22 +273,6 @@ class ClusteringWidgetQt(QWidget):
     def get_current_cluster_dropdown(self):
         color_dropdown = QComboBox(self)
         color_dropdown.setSizeAdjustPolicy(QComboBox.AdjustToContentsOnFirstShow)
-
-        color_dropdown.addItem("")
-        color_dropdown.addItem("")
-        color_dropdown.addItem("")
-
-        pixmap = QPixmap(10, 10)
-        pixmap.fill(QColor(Qt.black))
-        color_dropdown.setItemData(0, pixmap, Qt.DecorationRole)
-
-        pixmap = QPixmap(10, 10)
-        pixmap.fill(QColor(Qt.green))
-        color_dropdown.setItemData(1, pixmap, Qt.DecorationRole)
-
-        pixmap = QPixmap(10, 10)
-        pixmap.fill(QColor(Qt.red))
-        color_dropdown.setItemData(2, pixmap, Qt.DecorationRole)
         return color_dropdown
 
     def reestimate_umap(self):

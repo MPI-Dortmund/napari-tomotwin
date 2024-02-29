@@ -34,17 +34,7 @@ from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 
 class UmapToolQt(QWidget):
 
-    refinement_done = Signal("PyQt_PyObject")
     target_calc_done = Signal("PyQt_PyObject")
-
-    @staticmethod
-    def check_if_gpu_is_available() -> bool:
-        try:
-            import cudf
-            import cuml
-        except:
-            return False
-        return True
 
     def __init__(self, napari_viewer: "napari.Viewer"):
         super().__init__()
@@ -56,8 +46,6 @@ class UmapToolQt(QWidget):
         # UI Setup
         ######
         layout = QFormLayout()
-        app = QApplication.instance()
-        app.lastWindowClosed.connect(self.on_close_callback)  # this line is connection to signal
         layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         self.setLayout(layout)
 
@@ -128,23 +116,6 @@ class UmapToolQt(QWidget):
 
 
         ####
-        # Recalculate UMAP UI Elements
-        ####
-        self._run_umap_recalc_btn = QPushButton("Recalculate UMAP for selected clusters", self)
-        self._run_umap_recalc_btn.clicked.connect(self._on_refine_click)
-        self._run_umap_recalc_btn.setEnabled(False)
-        self._run_umap_recalc_btn.setToolTip("Takes the embeddings assigned to a cluster and calculates a new UMAP based on these embeddings. This can be helpful to pinpoint the region that encodes the center of the protein or to clean clusters from unwanted embeddings.")
-        if not self.check_if_gpu_is_available():
-            self.nvidia_available = False
-            self._run_umap_recalc_btn.setEnabled(False)
-            self._run_umap_recalc_btn.setToolTip("No NVIDIA GPU available")
-        self.layout().addRow("", self._run_umap_recalc_btn)
-
-
-        self.refinement_done.connect(self.show_umap_callback)
-
-
-        ####
         # Show target embedding position
         ####
         self._run_show_targets= QPushButton("Show target embedding positions", self)
@@ -169,13 +140,6 @@ class UmapToolQt(QWidget):
         self._target_point_layer = None
 
 
-
-    def cleanup(self):
-        try:
-            shutil.rmtree(self.tmp_dir_path)
-        except AttributeError:
-            # Means that the there was no recalculated UMAP
-            pass
 
     def patched_run(self, *args, **kwargs):
         result = self.plotter_widget_run_func(*args, **kwargs)
@@ -244,38 +208,17 @@ class UmapToolQt(QWidget):
 
 
 
-       # pass
-    def on_close_callback(self):
-        self.cleanup()
-
     def set_plotter_widget(self, widget: PlotterWidget):
         self.plotter_widget = widget
 
     def set_umap_tool(self, tool: LoadUmapTool):
         self.load_umap_tool = tool
 
-    def _on_refine_click(self):
-        self.viewer.window._qt_window.setEnabled(False)
-        self.delete_points_layer()
-        self.reestimate_umap()
 
     @staticmethod
     def random_filename() -> str:
         return next(tempfile._get_candidate_names())
 
-    def napari_update_umap(self, umap_embeddings, used_embeddings):
-
-        self.tmp_dir_path = tempfile.mkdtemp()
-        tmp_embed_pth = os.path.join(self.tmp_dir_path, UmapToolQt.random_filename())
-        used_embeddings.to_pickle(tmp_embed_pth)
-        umap_embeddings.attrs['embeddings_path'] = tmp_embed_pth
-        tmp_umap_pth = os.path.join(self.tmp_dir_path, UmapToolQt.random_filename())
-        umap_embeddings.to_pickle(tmp_umap_pth)
-
-        # Visualizse it
-        self.load_umap_tool.set_new_label_layer_name("UMAP Refined")
-        worker = self.load_umap_tool.start_umap_worker(tmp_umap_pth)
-        worker.start()
 
 
     def show_targets_callback(self, future: futures.Future):
