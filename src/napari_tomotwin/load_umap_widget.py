@@ -16,7 +16,8 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QLabel,
     QHBoxLayout,
-    QLineEdit
+    QLineEdit,
+    QDockWidget
 )
 from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 
@@ -81,11 +82,9 @@ class UmapToolQt(QWidget):
                 widget_name='Plotter Widget',
                 tabify=False)
 
-            self.cluster_widget_dock, self.cluster_widget = self.viewer.window.add_plugin_dock_widget(
-                'napari-tomotwin',
-                widget_name='ClusterTool',
-                tabify=False)
-
+            from .cluster_widget import ClusteringWidgetQt
+            self.cluster_widget = ClusteringWidgetQt(self.viewer)
+            self.cluster_widget_dock  = self.viewer.window.add_dock_widget(self.cluster_widget, area='right', name="UMAP Tools")
 
 
             self.load_umap_tool = LoadUmapTool(plotter_widget=self.plotter_widget)

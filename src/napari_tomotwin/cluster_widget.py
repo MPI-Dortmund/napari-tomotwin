@@ -132,7 +132,7 @@ class ClusteringWidgetQt(QWidget):
         save_delete_layout.addWidget(self.save)
         self.layout().addRow("", save_delete_layout)
         self.layout().addWidget(self.progressbar)
-        self.setMaximumHeight(300)
+        self.setMinimumHeight(300)
 
     def get_umap_tool(self) -> LoadUmapTool:
         if self._load_umap_tool is None:

@@ -8,14 +8,8 @@ contributions:
     - id: napari-tomotwin.UmapTool
       python_name: napari_tomotwin.load_umap_widget:UmapToolQt
       title: Refine umap
-    - id: napari-tomotwin.ClusterWidget
-      python_name: napari_tomotwin.cluster_widget:ClusteringWidgetQt
-      title: Clustering tool
   widgets:
     - command: napari-tomotwin.UmapTool
       display_name: Cluster UMAP embeddings
     - command: napari-tomotwin.make_targets
       display_name: Save cluster targets
-    - command: napari-tomotwin.ClusterWidget
-      display_name: ClusterTool
-
