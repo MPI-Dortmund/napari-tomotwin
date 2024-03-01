@@ -195,6 +195,8 @@ class ClusteringWidgetQt(QWidget):
 
 
     def cleanup(self):
+        if self.tmp_dir_path is None:
+            return
         try:
             shutil.rmtree(self.tmp_dir_path)
         except AttributeError:
