@@ -67,7 +67,8 @@ class ClusteringWidgetQt(QWidget):
         self.plotter_widget: PlotterWidget
         self._load_umap_tool = None
         self.tmp_dir_path: str = None
-        self.progressbar = LabeledProgressBar(QLabel(""))
+        self.pbar_label = QLabel("")
+        self.progressbar = LabeledProgressBar(self.pbar_label)
         self.progressbar.setRange(0, 0)
         self.progressbar.setHidden(True)
         self.added_canditates: int = 0
@@ -131,7 +132,10 @@ class ClusteringWidgetQt(QWidget):
         save_delete_layout.addWidget(self.delete)
         save_delete_layout.addWidget(self.save)
         self.layout().addRow("", save_delete_layout)
-        self.layout().addWidget(self.progressbar)
+        pbar_layout = QHBoxLayout()
+        pbar_layout.addWidget(self.pbar_label)
+        pbar_layout.addWidget(self.progressbar)
+        self.layout().addRow("",pbar_layout)
         self.setMinimumHeight(300)
 
     def get_umap_tool(self) -> LoadUmapTool:
@@ -341,7 +345,6 @@ class ClusteringWidgetQt(QWidget):
         return rgba
 
     def update_all(self):
-        print("Update all", self.plotter_widget.layer_select.value.name)
         cls = []
         if hasattr(self.plotter_widget.layer_select.value, 'features') and 'MANUAL_CLUSTER_ID' in self.plotter_widget.layer_select.value.features:
             cls = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
