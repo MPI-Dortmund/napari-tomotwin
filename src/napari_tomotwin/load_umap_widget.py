@@ -53,7 +53,7 @@ class UmapToolQt(QWidget):
         # Select UMAP UI Elements
         ###
         umap_pth_layout = QHBoxLayout()
-        self._select_umap_pth_btn = QPushButton("Select file", self)
+        self._select_umap_pth_btn = QPushButton("Select", self)
         self._selected_umap_pth = QLineEdit()
 
         def select_file_clicked():
