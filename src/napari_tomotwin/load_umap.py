@@ -22,16 +22,19 @@ from qtpy.QtWidgets import (
 
 class LoadUmapTool:
 
-    def __init__(self, pbar: LabeledProgressBar, plotter_widget = None):
+    def __init__(self,plotter_widget = None):
 
         self.umap = None
         self.plotter_widget = plotter_widget
-        self.pbar = pbar
+        self.pbar = None
         self.circles: List[Circle] = []
         self.viewer = napari.current_viewer()
         self.label_layer_name: str = "Label layer"
         self.viewer.mouse_drag_callbacks.append(partial(drag_circle_callback, self.plotter_widget))
         self.created_layers = []
+        
+    def set_progressbar(self, pbar):
+        self.pbar = pbar
 
     def set_new_label_layer_name(self, name: str):
         self.label_layer_name = name

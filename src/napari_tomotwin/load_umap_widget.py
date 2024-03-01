@@ -95,14 +95,15 @@ class UmapToolQt(QWidget):
                                                                                widget_name='Plotter Widget',
                                                                                tabify=False)
 
-            self.load_umap_tool = LoadUmapTool(pbar=self.progressBar, plotter_widget=self.plotter_widget)
+            self.load_umap_tool = LoadUmapTool(plotter_widget=self.plotter_widget)
+            self.load_umap_tool.set_progressbar(self.progressBar)
 
             self.cluster_widget_dock, self.cluster_widget = self.viewer.window.add_plugin_dock_widget(
                 'napari-tomotwin',
                 widget_name='ClusterTool',
                 tabify=True)
             self.cluster_widget.set_plotter_widget(self.plotter_widget)
-            self.cluster_widget.set_umap_tool(self.load_umap_tool)
+            #self.cluster_widget.set_umap_tool(self.load_umap_tool)
 
             self.progressBar.setHidden(False)
             self.plotter_widget_run_func = self.plotter_widget.run

@@ -64,9 +64,11 @@ class ClusteringWidgetQt(QWidget):
 
         self.viewer = napari_viewer
         self.plotter_widget: PlotterWidget
-        self.load_umap_tool: LoadUmapTool
+        self._load_umap_tool = None
         self.tmp_dir_path: str = None
         self.progressbar = LabeledProgressBar(QLabel(""))
+        self.progressbar.setRange(0, 0)
+        self.progressbar.setHidden(True)
         self.added_canditates : int = 0
 
 
@@ -146,6 +148,11 @@ class ClusteringWidgetQt(QWidget):
         self.layout().addRow("", save_delete_layout)
         self.layout().addWidget(self.progressbar)
 
+    def get_umap_tool(self) -> LoadUmapTool:
+        if self._load_umap_tool is None:
+            self._load_umap_tool = LoadUmapTool(self.plotter_widget)
+            self._load_umap_tool.set_progressbar(self.progressbar)
+        return self._load_umap_tool
     @staticmethod
     def check_if_gpu_is_available() -> bool:
         try:
@@ -189,10 +196,6 @@ class ClusteringWidgetQt(QWidget):
 
         except Exception as e:
             pass
-
-    def set_umap_tool(self, umap_tool: LoadUmapTool):
-        self.load_umap_tool = umap_tool
-
 
     def cleanup(self):
         if self.tmp_dir_path is None:
@@ -238,8 +241,8 @@ class ClusteringWidgetQt(QWidget):
         umap_embeddings.to_pickle(tmp_umap_pth)
 
         # Visualizse it
-        self.load_umap_tool.set_new_label_layer_name("UMAP Refined")
-        worker = self.load_umap_tool.start_umap_worker(tmp_umap_pth)
+        self.get_umap_tool().set_new_label_layer_name("UMAP Refined")
+        worker = self.get_umap_tool().start_umap_worker(tmp_umap_pth)
         worker.start()
         #worker.returned.connect(self.update_all)
 
