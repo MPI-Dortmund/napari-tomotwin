@@ -1,8 +1,20 @@
+import os
 import shutil
+import tempfile
+from concurrent import futures
 
 import numpy as np
-from PyQt5.QtWidgets import QComboBox, QStyledItemDelegate, QFrame
+import pandas as pd
+from PyQt5.QtWidgets import QComboBox, QStyledItemDelegate
 from napari.utils import notifications
+from napari_clusters_plotter._plotter import PlotterWidget
+from napari_clusters_plotter._utilities import get_nice_colormap
+from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
+from napari_tomotwin.load_umap import LoadUmapTool
+from qtpy.QtCore import Qt
+from qtpy.QtCore import Signal
+from qtpy.QtGui import QColor, QPixmap
+from qtpy.QtWidgets import QApplication
 from qtpy.QtWidgets import (
     QFormLayout,
     QPushButton,
@@ -11,28 +23,13 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QLabel,
     QHBoxLayout,
-    QLineEdit,
     QListView,
     QTableWidgetItem,
-    QTableWidget,
-    QHeaderView,
-    QLayout
+    QTableWidget
 )
-from qtpy.QtWidgets import QApplication
-from qtpy.QtGui import QColor, QPixmap
-from qtpy.QtCore import Qt
-from qtpy.QtCore import Signal
-import tempfile
-from napari_tomotwin.load_umap import LoadUmapTool
 
-
-from napari_clusters_plotter._plotter import PlotterWidget
-from napari_clusters_plotter._utilities import get_nice_colormap
-import pandas as pd
-from concurrent import futures
 from . import umap_refiner as urefine
-import os
-from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
+
 
 class ColorItemDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
@@ -45,6 +42,7 @@ class ColorItemDelegate(QStyledItemDelegate):
         # Set the size of the item
         return index.data(Qt.SizeHintRole) if index.data(Qt.SizeHintRole) else super().sizeHint(option, index)
 
+
 class ColorComboBox(QComboBox):
     def __init__(self):
         super().__init__()
@@ -55,6 +53,7 @@ class ColorComboBox(QComboBox):
 
         # Set the combo box to only display icons
         self.setView(QListView(self))
+
 
 class ClusteringWidgetQt(QWidget):
     refinement_done = Signal("PyQt_PyObject")
@@ -69,8 +68,7 @@ class ClusteringWidgetQt(QWidget):
         self.progressbar = LabeledProgressBar(QLabel(""))
         self.progressbar.setRange(0, 0)
         self.progressbar.setHidden(True)
-        self.added_canditates : int = 0
-
+        self.added_canditates: int = 0
 
         #######
         # UI Setup
@@ -95,7 +93,7 @@ class ClusteringWidgetQt(QWidget):
             self._recalc_umap.setToolTip("No NVIDIA GPU available")
         self.refinement_done.connect(self.show_umap_callback)
         self._cluster_dropdown = self.get_current_cluster_dropdown()
-        #self._cluster_dropdown.currentIndexChanged.connect(lambda _: self._recalc_umap.setEnabled(self._cluster_dropdown.count()>0) )
+        # self._cluster_dropdown.currentIndexChanged.connect(lambda _: self._recalc_umap.setEnabled(self._cluster_dropdown.count()>0) )
 
         self._show_targets = QPushButton("Show targets", self)
 
@@ -103,16 +101,12 @@ class ClusteringWidgetQt(QWidget):
         self._add_candidate.setEnabled(False)
         self._add_candidate.clicked.connect(self.add_candidate)
 
-
-
         recalc_layout.addWidget(self._cluster_dropdown)
         recalc_layout.addWidget(self._show_targets)
         recalc_layout.addWidget(self._recalc_umap)
         recalc_layout.addWidget(self._add_candidate)
 
         self.layout().addRow("", recalc_layout)
-
-
 
         ## Now q table widget
         candlabl = QLabel("Candidates:")
@@ -122,7 +116,6 @@ class ClusteringWidgetQt(QWidget):
         self.tableWidget.setHorizontalHeaderLabels(["", "Color", "UMAP", "Description"])
         self.tableWidget.setSelectionBehavior(QTableWidget.SelectRows)
         self.layout().addWidget(self.tableWidget)
-
 
         ## Save and delete
         save_delete_layout = QHBoxLayout()
@@ -141,6 +134,7 @@ class ClusteringWidgetQt(QWidget):
             self._load_umap_tool = LoadUmapTool(self.plotter_widget)
             self._load_umap_tool.set_progressbar(self.progressbar)
         return self._load_umap_tool
+
     @staticmethod
     def check_if_gpu_is_available() -> bool:
         try:
@@ -150,11 +144,10 @@ class ClusteringWidgetQt(QWidget):
             return False
         return True
 
-
     def set_plotter_widget(self, plotter_widget: PlotterWidget):
         self.plotter_widget = plotter_widget
         self.plotter_widget_run_func = self.plotter_widget.run
-        self.plotter_widget.graphics_widget.mpl_connect('draw_event', lambda _ : self.after_draw_event())
+        self.plotter_widget.graphics_widget.mpl_connect('draw_event', lambda _: self.after_draw_event())
 
     def delete_candidate(self):
         if self.tableWidget.currentItem() is None:
@@ -170,19 +163,27 @@ class ClusteringWidgetQt(QWidget):
         try:
             # The target points layer should get deleted when clusters are reseted
             # Furthermore, the button to calculate the targest should get disabled
-            clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
-            if len(np.unique(clusters)) == 1: # 1=only background cluster
-                #self.delete_points_layer()
-                #self._run_show_targets.setEnabled(False)
+            no_clusters = True
+            if 'MANUAL_CLUSTER_ID' in self.plotter_widget.layer_select.value.features:
+                clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+                ucl = np.unique(clusters)
+                no_clusters = len(ucl)==1
+
+            if no_clusters:  # 1=only background cluster
+                # self.delete_points_layer()
+                # self._run_show_targets.setEnabled(False)
                 self._recalc_umap.setEnabled(False)
                 self._add_candidate.setEnabled(False)
+                self._show_targets.setEnabled(False)
             else:
-                #self._run_show_targets.setEnabled(True)
+                # self._run_show_targets.setEnabled(True)
                 if self.nvidia_available:
                     self._recalc_umap.setEnabled(True)
                 self._add_candidate.setEnabled(True)
+                self._show_targets.setEnabled(True)
 
         except Exception as e:
+            print(e)
             pass
 
     def cleanup(self):
@@ -201,9 +202,9 @@ class ClusteringWidgetQt(QWidget):
 
         current_row_count = self.tableWidget.rowCount()
         self.tableWidget.setRowCount(current_row_count + 1)
-        self.added_canditates = self.added_canditates +1
-        c = self._cluster_dropdown.currentIndex()+1
-        entry = ["","",self.plotter_widget.layer_select.value.name, f"target-{self.added_canditates}"]
+        self.added_canditates = self.added_canditates + 1
+        c = self._cluster_dropdown.currentIndex() + 1
+        entry = ["", "", self.plotter_widget.layer_select.value.name, f"target-{self.added_canditates}"]
         for col, value in enumerate(entry):
             item = QTableWidgetItem(value)
             if col == 0:
@@ -232,7 +233,7 @@ class ClusteringWidgetQt(QWidget):
         self.get_umap_tool().set_new_label_layer_name("UMAP Refined")
         worker = self.get_umap_tool().start_umap_worker(tmp_umap_pth)
         worker.start()
-        #worker.returned.connect(self.update_all)
+        # worker.returned.connect(self.update_all)
 
     def show_umap_callback(self, future: futures.Future):
         print("SHOW")
@@ -251,6 +252,7 @@ class ClusteringWidgetQt(QWidget):
                 ]
         rgba.append(int(255 * 0.9))
         return rgba
+
     def update_all(self):
         print("Update all", self.plotter_widget.layer_select.value.name)
         cls = []
@@ -258,7 +260,7 @@ class ClusteringWidgetQt(QWidget):
             cls = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
         self.update_items_cluster_dropdown(self._cluster_dropdown, cls)
 
-    def update_items_cluster_dropdown(self, dropdown : QComboBox, cluster_ids: list[int]):
+    def update_items_cluster_dropdown(self, dropdown: QComboBox, cluster_ids: list[int]):
 
         dropdown.clear()
         for c in np.unique(cluster_ids):
@@ -268,13 +270,12 @@ class ClusteringWidgetQt(QWidget):
             dropdown.addItem("")
             pixmap = QPixmap(10, 10)
             pixmap.fill(QColor(*rgba))
-            dropdown.setItemData(dropdown.count()-1, pixmap, Qt.DecorationRole)
+            dropdown.setItemData(dropdown.count() - 1, pixmap, Qt.DecorationRole)
 
     def _on_refine_click(self):
         self.viewer.window._qt_window.setEnabled(False)
-        #self.delete_points_layer()
+        # self.delete_points_layer()
         self.reestimate_umap()
-
 
     def get_current_cluster_dropdown(self):
         color_dropdown = QComboBox(self)
@@ -285,7 +286,7 @@ class ClusteringWidgetQt(QWidget):
         try:
             print("Read clusters")
             clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
-            if not np.any(clusters>0):
+            if not np.any(clusters > 0):
                 raise KeyError
         except KeyError:
             notifications.show_info(f"No cluster selected. Can't refine.")
@@ -300,19 +301,19 @@ class ClusteringWidgetQt(QWidget):
                 msg.setIcon(QMessageBox.Critical)
                 msg.setWindowTitle("Can't open embedding file")
                 msg.setText("Can't open embedding file")
-                msg.setInformativeText("Embedding path in metadata data (see below) does not exist or can't be accesst. Please click OK and select the path to the embedding file.")
+                msg.setInformativeText(
+                    "Embedding path in metadata data (see below) does not exist or can't be accesst. Please click OK and select the path to the embedding file.")
                 msg.setDetailedText(pth)
                 msg.setStandardButtons(QMessageBox.Ok)
                 msg.exec_()
                 pth = QFileDialog.getOpenFileName(self, 'Open embedding file',
-                                                    os.getcwd(),
-                                                    "Embedding file (*.temb)")[0]
+                                                  os.getcwd(),
+                                                  "Embedding file (*.temb)")[0]
 
             return pth
 
         print("Read embeddings")
         emb_pth = get_embedding_path(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'])
-
 
         if emb_pth == "":
             print("No path selected.")
@@ -327,7 +328,7 @@ class ClusteringWidgetQt(QWidget):
         # this workaround using signal is necessary, as "add_done_callback" starts the method
         # in a separate thread, but to change Qt elements, it must be run in the same thread as the main program.
         ppe = futures.ProcessPoolExecutor(max_workers=1)
-        target_cluster = self._cluster_dropdown.currentIndex()+1
-        f= ppe.submit(urefine.refine, clusters,embeddings, target_cluster)
+        target_cluster = self._cluster_dropdown.currentIndex() + 1
+        f = ppe.submit(urefine.refine, clusters, embeddings, target_cluster)
         ppe.shutdown(wait=False)
         f.add_done_callback(self.refinement_done.emit)
