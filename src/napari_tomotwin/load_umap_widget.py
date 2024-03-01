@@ -1,21 +1,12 @@
-import math
 import multiprocessing
+
 multiprocessing.set_start_method('spawn', force=True)
 import os
 import os.path
-import shutil
 import tempfile
 from concurrent import futures
-import numpy as np
-import pandas as pd
-from napari.utils import notifications
 from napari_clusters_plotter._plotter import PlotterWidget
-from napari_clusters_plotter._utilities import get_nice_colormap
-from napari_tomotwin.make_targets_widget import _make_targets, _get_medoid_embedding
 from napari_tomotwin.load_umap import LoadUmapTool
-from qtpy.QtWidgets import QApplication
-from . import umap_refiner as urefine
-
 
 from qtpy.QtWidgets import (
     QFormLayout,
@@ -27,9 +18,7 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QLineEdit
 )
-from qtpy.QtCore import Signal
 from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
-
 
 
 class UmapToolQt(QWidget):
@@ -38,7 +27,6 @@ class UmapToolQt(QWidget):
         super().__init__()
 
         self.viewer = napari_viewer
-
 
         #######
         # UI Setup
@@ -60,7 +48,6 @@ class UmapToolQt(QWidget):
                                               "UMAP file (*.tumap)")[0]
             self._selected_umap_pth.setText(pth)
 
-
         self._select_umap_pth_btn.clicked.connect(select_file_clicked)
         self._load_umap_btn = QPushButton("Load")
         umap_pth_layout.addWidget(self._selected_umap_pth)
@@ -70,7 +57,7 @@ class UmapToolQt(QWidget):
         self.plotter_widget: PlotterWidget = None
         self.plotter_widget_run_func = None
         self.plotter_Widget_dock = None
-        self.nvidia_available=True
+        self.nvidia_available = True
         self.load_umap_tool: LoadUmapTool
 
         def load_umap_btn_clicked():
@@ -79,27 +66,32 @@ class UmapToolQt(QWidget):
                 return
 
             if self.plotter_widget is not None:
-                ret = QMessageBox.question(self, '', "Do you really want to close the current UMAP and load another?", QMessageBox.Yes | QMessageBox.No)
+                ret = QMessageBox.question(self, '', "Do you really want to close the current UMAP and load another?",
+                                           QMessageBox.Yes | QMessageBox.No)
                 if ret == QMessageBox.No:
                     return
                 self.viewer.window.remove_dock_widget(self.plotter_Widget_dock)
                 for l in self.load_umap_tool.get_created_layers():
-                    self.plotter_widget.layer_select.changed.disconnect() # otherwise I get an emit loop error
+                    self.plotter_widget.layer_select.changed.disconnect()  # otherwise I get an emit loop error
                     self.viewer.layers.remove(l)
 
 
-
-            self.plotter_Widget_dock, self.plotter_widget = self.viewer.window.add_plugin_dock_widget('napari-clusters-plotter',
-                                                                               widget_name='Plotter Widget',
-                                                                               tabify=False)
-
-            self.load_umap_tool = LoadUmapTool(plotter_widget=self.plotter_widget)
-            self.load_umap_tool.set_progressbar(self.progressBar)
+            self.plotter_Widget_dock, self.plotter_widget = self.viewer.window.add_plugin_dock_widget(
+                'napari-clusters-plotter',
+                widget_name='Plotter Widget',
+                tabify=False)
 
             self.cluster_widget_dock, self.cluster_widget = self.viewer.window.add_plugin_dock_widget(
                 'napari-tomotwin',
                 widget_name='ClusterTool',
                 tabify=False)
+
+
+
+            self.load_umap_tool = LoadUmapTool(plotter_widget=self.plotter_widget)
+            self.load_umap_tool.set_progressbar(self.progressBar)
+
+
             self.cluster_widget.set_plotter_widget(self.plotter_widget)
             self.progressBar.setHidden(False)
 
@@ -109,7 +101,6 @@ class UmapToolQt(QWidget):
 
         self._load_umap_btn.clicked.connect(load_umap_btn_clicked)
 
-
         ###
         # Other
         ###
@@ -118,12 +109,10 @@ class UmapToolQt(QWidget):
 
         self.progressBar.setRange(0, 0)
         self.progressBar.hide()
-        self.layout().addRow(self.pbar_label,self.progressBar)
+        self.layout().addRow(self.pbar_label, self.progressBar)
         self.tmp_dir_path: str
-        self.setMaximumHeight(150)
+        self.setMaximumHeight(100)
         self._target_point_layer = None
-
-
 
     def set_plotter_widget(self, widget: PlotterWidget):
         self.plotter_widget = widget
@@ -131,18 +120,11 @@ class UmapToolQt(QWidget):
     def set_umap_tool(self, tool: LoadUmapTool):
         self.load_umap_tool = tool
 
-
     @staticmethod
     def random_filename() -> str:
         return next(tempfile._get_candidate_names())
-
-
 
     def show_umap_callback(self, future: futures.Future):
         (umap_embeddings, used_embeddings) = future.result()
         self.viewer.window._qt_window.setEnabled(True)
         self.napari_update_umap(umap_embeddings, used_embeddings)
-
-
-
-
