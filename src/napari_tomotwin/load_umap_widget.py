@@ -67,8 +67,8 @@ class UmapToolQt(QWidget):
         self._load_umap_btn = QPushButton("Load")
         umap_pth_layout.addWidget(self._selected_umap_pth)
         umap_pth_layout.addWidget(self._select_umap_pth_btn)
+        umap_pth_layout.addWidget(self._load_umap_btn)
         self.layout().addRow("Path to UMAP:", umap_pth_layout)
-        self.layout().addRow("", self._load_umap_btn)
         self.plotter_widget: PlotterWidget = None
         self.plotter_widget_run_func = None
         self.plotter_Widget_dock = None
@@ -101,7 +101,7 @@ class UmapToolQt(QWidget):
             self.cluster_widget_dock, self.cluster_widget = self.viewer.window.add_plugin_dock_widget(
                 'napari-tomotwin',
                 widget_name='ClusterTool',
-                tabify=True)
+                tabify=False)
             self.cluster_widget.set_plotter_widget(self.plotter_widget)
             #self.cluster_widget.set_umap_tool(self.load_umap_tool)
 

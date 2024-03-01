@@ -99,23 +99,20 @@ class ClusteringWidgetQt(QWidget):
 
         self._show_targets = QPushButton("Show targets", self)
 
+        self._add_candidate = QPushButton("Add candidate", self)
+        self._add_candidate.setEnabled(False)
+        self._add_candidate.clicked.connect(self.add_candidate)
+
 
 
         recalc_layout.addWidget(self._cluster_dropdown)
         recalc_layout.addWidget(self._show_targets)
         recalc_layout.addWidget(self._recalc_umap)
+        recalc_layout.addWidget(self._add_candidate)
 
         self.layout().addRow("", recalc_layout)
 
 
-
-
-        # Add a horizontal line
-        horizontal_line = QFrame(self)
-        horizontal_line.setFrameShape(QFrame.HLine)
-        horizontal_line.setFrameShadow(QFrame.Sunken)
-
-        self.layout().addWidget(horizontal_line)
 
         ## Now q table widget
         candlabl = QLabel("Candidates:")
@@ -126,18 +123,8 @@ class ClusteringWidgetQt(QWidget):
         self.tableWidget.setSelectionBehavior(QTableWidget.SelectRows)
         self.layout().addWidget(self.tableWidget)
 
-        ## Add candidate buttons
-        add_candidiate_layout = QHBoxLayout()
-        self._add_candidate = QPushButton("Add candidate", self)
-        self._add_candidate.setEnabled(False)
-        self._add_candidate.clicked.connect(self.add_candidate)
-        self._candidate_dropdown = self.get_current_cluster_dropdown()
-        add_candidiate_layout.addWidget(self._candidate_dropdown)
-        add_candidiate_layout.addWidget(self._add_candidate)
-        self.layout().addRow("", add_candidiate_layout)
 
         ## Save and delete
-
         save_delete_layout = QHBoxLayout()
         self.save = QPushButton("Save candidates", self)
         self.save.clicked.connect(self.update_all)
@@ -147,6 +134,7 @@ class ClusteringWidgetQt(QWidget):
         save_delete_layout.addWidget(self.save)
         self.layout().addRow("", save_delete_layout)
         self.layout().addWidget(self.progressbar)
+        self.setMinimumHeight(300)
 
     def get_umap_tool(self) -> LoadUmapTool:
         if self._load_umap_tool is None:
@@ -214,7 +202,7 @@ class ClusteringWidgetQt(QWidget):
         current_row_count = self.tableWidget.rowCount()
         self.tableWidget.setRowCount(current_row_count + 1)
         self.added_canditates = self.added_canditates +1
-        c = self._candidate_dropdown.currentIndex()+1
+        c = self._cluster_dropdown.currentIndex()+1
         entry = ["","",self.plotter_widget.layer_select.value.name, f"target-{self.added_canditates}"]
         for col, value in enumerate(entry):
             item = QTableWidgetItem(value)
@@ -269,7 +257,6 @@ class ClusteringWidgetQt(QWidget):
         if 'MANUAL_CLUSTER_ID' in self.plotter_widget.layer_select.value.features:
             cls = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
         self.update_items_cluster_dropdown(self._cluster_dropdown, cls)
-        self.update_items_cluster_dropdown(self._candidate_dropdown,cls)
 
     def update_items_cluster_dropdown(self, dropdown : QComboBox, cluster_ids: list[int]):
 
