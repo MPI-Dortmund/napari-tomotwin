@@ -5,7 +5,7 @@ from concurrent import futures
 
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import QComboBox, QStyledItemDelegate
+from PyQt5.QtWidgets import QComboBox, QStyledItemDelegate, QHeaderView
 from napari.utils import notifications
 from napari_clusters_plotter._plotter import PlotterWidget
 from napari_clusters_plotter._utilities import get_nice_colormap
@@ -30,6 +30,7 @@ from qtpy.QtWidgets import (
 )
 
 from . import umap_refiner as urefine
+from .target_manager import TargetManager, Target
 
 
 class ColorItemDelegate(QStyledItemDelegate):
@@ -73,6 +74,7 @@ class ClusteringWidgetQt(QWidget):
         self.progressbar.setHidden(True)
         self.added_canditates: int = 0
         self._target_point_layer = None
+        self.target_manger = TargetManager()
 
         #######
         # UI Setup
@@ -118,15 +120,24 @@ class ClusteringWidgetQt(QWidget):
         candlabl = QLabel("Candidates:")
         self.layout().addWidget(candlabl)
         self.tableWidget = QTableWidget(self)
+        self.tableWidgetHeaders = ["ID", "Color", "UMAP", "Label"]
         self.tableWidget.setColumnCount(4)
-        self.tableWidget.setHorizontalHeaderLabels(["", "Color", "UMAP", "Description"])
+        self.tableWidget.setHorizontalHeaderLabels(self.tableWidgetHeaders)
+        header = self.tableWidget.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+
         self.tableWidget.setSelectionBehavior(QTableWidget.SelectRows)
+        self.tableWidget.setSelectionMode(QTableWidget.SingleSelection)
+        self.tableWidget.itemChanged.connect(self._table_name_changed)
         self.layout().addWidget(self.tableWidget)
 
         ## Save and delete
         save_delete_layout = QHBoxLayout()
         self.save = QPushButton("Save candidates", self)
-        self.save.clicked.connect(self.update_all)
+        self.save.clicked.connect(self._save_candidate_click)
         self.delete = QPushButton("Delete candidates", self)
         self.delete.clicked.connect(self.delete_candidate)
         save_delete_layout.addWidget(self.delete)
@@ -163,9 +174,17 @@ class ClusteringWidgetQt(QWidget):
             return
         selected_row = self.tableWidget.currentRow()
         if selected_row >= 0:
+
+            first_column_item = self.tableWidget.item(selected_row, 0)
+
+
+            id = int(first_column_item.text())
+            self.target_manger.remove_target([id])
+
             self.tableWidget.removeRow(selected_row)
             self.tableWidget.clearSelection()
             self.tableWidget.setCurrentItem(None)
+
 
     def delete_points_layer(self):
         if self._target_point_layer is not None:
@@ -237,6 +256,8 @@ class ClusteringWidgetQt(QWidget):
         points = pd.concat(points)
         return points
 
+    def _save_candidate_click(self):
+        pass
     def _on_show_target_clicked(self):
         emb_pth = self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path']
         clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
@@ -289,18 +310,48 @@ class ClusteringWidgetQt(QWidget):
     def _on_close_callback(self):
         self.cleanup()
 
+    def _table_name_changed(self, item: QTableWidgetItem):
+        self.tableWidget.itemChanged.disconnect(self._table_name_changed)
+
+        # Your logic to update the item as needed
+
+        if self.tableWidgetHeaders[item.column()] == 'Label':
+            print("HIER")
+            rexpr = r'\/:*?"<>| '
+            translation_table = str.maketrans(rexpr,"_"*len(rexpr))
+            item.setText(str(item.text()).translate(translation_table))
+
+
+        self.tableWidget.itemChanged.connect(self._table_name_changed)
+
+    def make_target(self,cluster_id):
+        embeddings_mask = self.plotter_widget.layer_select.value.features["MANUAL_CLUSTER_ID"]==cluster_id
+        embeddings_path = self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path']
+        color = self.index_to_rgba(cluster_id)
+        target = Target(embeddings_path, embeddings_mask, color)
+        return target
+
+
+
     def _on_add_candidate_clicked(self):
 
+        c = self._cluster_dropdown.currentIndex() + 1
+        target = self.make_target(c)
+
+        target_added_succesfull = self.target_manger.add_target(target)
+        if not target_added_succesfull:
+            return
+        print("TARGET ID IS", target.target_id)
         current_row_count = self.tableWidget.rowCount()
         self.tableWidget.setRowCount(current_row_count + 1)
         self.added_canditates = self.added_canditates + 1
-        c = self._cluster_dropdown.currentIndex() + 1
-        entry = ["", "", self.plotter_widget.layer_select.value.name, f"target-{self.added_canditates}"]
+
+
+        entry = [f"{target.target_id}", "", self.plotter_widget.layer_select.value.name, target.target_name]
         for col, value in enumerate(entry):
             item = QTableWidgetItem(value)
             if col == 0:
-                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-                item.setCheckState(Qt.Checked)
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
             if col == 1:
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                 pixmap = QPixmap(10, 10)
