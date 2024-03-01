@@ -42,7 +42,7 @@ def _get_avg_embedding(embeddings: pd.DataFrame) -> Tuple[pd.DataFrame, npt.Arra
     target = only_emb.mean(axis=0)
     return target, np.array([])
 
-def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame, avg_func: Callable[[pd.DataFrame], npt.ArrayLike]) -> Tuple[pd.DataFrame, List[pd.DataFrame], dict]:
+def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame, avg_func: Callable[[pd.DataFrame], npt.ArrayLike], target_cluster: int = None) -> Tuple[pd.DataFrame, List[pd.DataFrame], dict]:
     targets = []
     sub_embeddings = []
     target_names = []
@@ -53,6 +53,9 @@ def _make_targets(embeddings: pd.DataFrame, clusters: pd.DataFrame, avg_func: Ca
 
         if cluster == 0:
             continue
+        if target_cluster is not None and cluster != target_cluster:
+            continue
+            
         clmask = (clusters == cluster).to_numpy()
 
         cluster_embeddings = embeddings.loc[clmask, :]

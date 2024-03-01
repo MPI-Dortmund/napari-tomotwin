@@ -34,8 +34,6 @@ from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 
 class UmapToolQt(QWidget):
 
-    target_calc_done = Signal("PyQt_PyObject")
-
     def __init__(self, napari_viewer: "napari.Viewer"):
         super().__init__()
 
@@ -103,28 +101,13 @@ class UmapToolQt(QWidget):
                 widget_name='ClusterTool',
                 tabify=False)
             self.cluster_widget.set_plotter_widget(self.plotter_widget)
-            #self.cluster_widget.set_umap_tool(self.load_umap_tool)
-
             self.progressBar.setHidden(False)
-            self.plotter_widget_run_func = self.plotter_widget.run
-            self.plotter_widget.run=self.patched_run
+
             self.load_umap_tool.set_new_label_layer_name("UMAP")
             worker = self.load_umap_tool.start_umap_worker(self._selected_umap_pth.text())
             worker.start()
 
         self._load_umap_btn.clicked.connect(load_umap_btn_clicked)
-
-
-
-        ####
-        # Show target embedding position
-        ####
-        self._run_show_targets= QPushButton("Show target embedding positions", self)
-        self._run_show_targets.clicked.connect(self._on_show_target_clicked)
-        self._run_show_targets.setEnabled(False)
-        self._run_show_targets.setToolTip("For each cluster, it estimates the target embedding (medoid) and visualizes its position in the tomogram with the same edge color as the cluster.")
-        self.layout().addRow("", self._run_show_targets)
-        self.target_calc_done.connect(self.show_targets_callback)
 
 
         ###
@@ -142,73 +125,6 @@ class UmapToolQt(QWidget):
 
 
 
-    def patched_run(self, *args, **kwargs):
-        result = self.plotter_widget_run_func(*args, **kwargs)
-        try:
-            # The target points layer should get deleted when clusters are reseted
-            # Furthermore, the button to calculate the targest should get disabled
-            clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
-            if len(np.unique(clusters)) == 1: # 1=only background cluster
-                self.delete_points_layer()
-                self._run_show_targets.setEnabled(False)
-                self._run_umap_recalc_btn.setEnabled(False)
-            else:
-                self._run_show_targets.setEnabled(True)
-                if self.nvidia_available:
-                    self._run_umap_recalc_btn.setEnabled(True)
-        except Exception as e:
-            pass
-        return result
-
-    @staticmethod
-    def calc_targets(embedding_path: str , clusters: np.array) -> pd.DataFrame:
-        # get embeddings
-        embeddings = pd.read_pickle(embedding_path)
-        embeddings = embeddings.drop(columns=["level_0", "index"], errors="ignore")
-
-        # get clusters
-
-
-        # calculate target positions
-        _, _, target_locations = _make_targets(embeddings=embeddings, clusters=clusters, avg_func=_get_medoid_embedding)
-
-        # Create points coords
-
-        points = []
-        for c in np.unique(clusters):
-            c = int(c)
-            if c == 0:
-                continue
-            points.append(target_locations[c][["Z", "Y", "X"]].drop(columns=["level_0", "index"], errors="ignore"))
-
-        points = pd.concat(points)
-        return points
-
-
-    def _on_show_target_clicked(self):
-        emb_pth = self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path']
-        clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
-
-        self.progressBar.setHidden(False)
-        self.progressBar.set_label_text("Calculate target positions")
-
-        ppe = futures.ProcessPoolExecutor(max_workers=1)
-        f= ppe.submit(self.calc_targets, emb_pth, clusters)
-        ppe.shutdown(wait=False)
-        f.add_done_callback(self.target_calc_done.emit)
-
-
-    def delete_points_layer(self):
-        if self._target_point_layer is not None:
-            try:
-                self.viewer.layers.remove(self._target_point_layer)
-            except ValueError:
-                # Then it somehow got deleted
-                pass
-            self._target_point_layer = None
-
-
-
     def set_plotter_widget(self, widget: PlotterWidget):
         self.plotter_widget = widget
 
@@ -220,37 +136,6 @@ class UmapToolQt(QWidget):
     def random_filename() -> str:
         return next(tempfile._get_candidate_names())
 
-
-
-    def show_targets_callback(self, future: futures.Future):
-        points: pd.DataFrame = future.result()
-        point_colors = []
-        colors = get_nice_colormap()
-        import PIL.ImageColor as ImageColor
-
-        for c in range(1,len(points)+1):
-            rgba = [float(v) / 255
-                    for v in list(
-                    ImageColor.getcolor(colors[c % len(colors)], "RGB")
-                )
-                    ]
-            rgba.append(0.9)
-            point_colors.append(rgba)
-
-        self.delete_points_layer()
-
-        self._target_point_layer = self.viewer.add_points(points,
-                                                          symbol='o',
-                                                          size=37,
-                                                          edge_color=point_colors,
-                                                          face_color="transparent",
-                                                          edge_width=0.10,
-                                                          out_of_slice_display=True,
-                                                          name="Targets")
-
-        self.viewer.window._qt_window.setEnabled(True)
-        self.progressBar.setHidden(True)
-        self.progressBar.set_label_text("")
 
 
     def show_umap_callback(self, future: futures.Future):

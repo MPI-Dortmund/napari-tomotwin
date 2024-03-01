@@ -10,6 +10,7 @@ from napari.utils import notifications
 from napari_clusters_plotter._plotter import PlotterWidget
 from napari_clusters_plotter._utilities import get_nice_colormap
 from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
+from napari_tomotwin.make_targets_widget import _make_targets, _get_medoid_embedding
 from napari_tomotwin.load_umap import LoadUmapTool
 from qtpy.QtCore import Qt
 from qtpy.QtCore import Signal
@@ -57,6 +58,7 @@ class ColorComboBox(QComboBox):
 
 class ClusteringWidgetQt(QWidget):
     refinement_done = Signal("PyQt_PyObject")
+    target_calc_done = Signal("PyQt_PyObject")
 
     def __init__(self, napari_viewer: "napari.Viewer"):
         super().__init__()
@@ -69,13 +71,14 @@ class ClusteringWidgetQt(QWidget):
         self.progressbar.setRange(0, 0)
         self.progressbar.setHidden(True)
         self.added_canditates: int = 0
+        self._target_point_layer = None
 
         #######
         # UI Setup
         ######
         layout = QFormLayout()
         app = QApplication.instance()
-        app.lastWindowClosed.connect(self.on_close_callback)  # this line is connection to signal
+        app.lastWindowClosed.connect(self._on_close_callback)  # this line is connection to signal
         layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         self.setLayout(layout)
 
@@ -93,13 +96,15 @@ class ClusteringWidgetQt(QWidget):
             self._recalc_umap.setToolTip("No NVIDIA GPU available")
         self.refinement_done.connect(self.show_umap_callback)
         self._cluster_dropdown = self.get_current_cluster_dropdown()
-        # self._cluster_dropdown.currentIndexChanged.connect(lambda _: self._recalc_umap.setEnabled(self._cluster_dropdown.count()>0) )
+        self._show_targets = QPushButton("Show target", self)
+        self._show_targets.clicked.connect(self._on_show_target_clicked)
+        self._show_targets.setToolTip("For the selected cluster it estimates the target embedding (medoid) and visualizes its position in the tomogram with the same edge color as the cluster.")
 
-        self._show_targets = QPushButton("Show targets", self)
+        self.target_calc_done.connect(self.show_targets_callback)
 
         self._add_candidate = QPushButton("Add candidate", self)
         self._add_candidate.setEnabled(False)
-        self._add_candidate.clicked.connect(self.add_candidate)
+        self._add_candidate.clicked.connect(self._on_add_candidate_clicked)
 
         recalc_layout.addWidget(self._cluster_dropdown)
         recalc_layout.addWidget(self._show_targets)
@@ -158,6 +163,15 @@ class ClusteringWidgetQt(QWidget):
             self.tableWidget.clearSelection()
             self.tableWidget.setCurrentItem(None)
 
+    def delete_points_layer(self):
+        if self._target_point_layer is not None:
+            try:
+                self.viewer.layers.remove(self._target_point_layer)
+            except ValueError:
+                # Then it somehow got deleted
+                pass
+            self._target_point_layer = None
+
     def after_draw_event(self):
         self.update_all()
         try:
@@ -170,13 +184,11 @@ class ClusteringWidgetQt(QWidget):
                 no_clusters = len(ucl)==1
 
             if no_clusters:  # 1=only background cluster
-                # self.delete_points_layer()
-                # self._run_show_targets.setEnabled(False)
+                self.delete_points_layer()
                 self._recalc_umap.setEnabled(False)
                 self._add_candidate.setEnabled(False)
                 self._show_targets.setEnabled(False)
             else:
-                # self._run_show_targets.setEnabled(True)
                 if self.nvidia_available:
                     self._recalc_umap.setEnabled(True)
                 self._add_candidate.setEnabled(True)
@@ -195,10 +207,85 @@ class ClusteringWidgetQt(QWidget):
             # Means that the there was no recalculated UMAP
             pass
 
-    def on_close_callback(self):
+    @staticmethod
+    def calc_targets(embedding_path: str, clusters: np.array, target_cluster: int) -> pd.DataFrame:
+        # get embeddings
+        embeddings = pd.read_pickle(embedding_path)
+        embeddings = embeddings.drop(columns=["level_0", "index"], errors="ignore")
+
+        # get clusters
+
+        # calculate target positions
+        _, _, target_locations = _make_targets(embeddings=embeddings, clusters=clusters, avg_func=_get_medoid_embedding, target_cluster=target_cluster)
+
+        # Create points coords
+
+        points = []
+        for c in np.unique(clusters):
+            c = int(c)
+            if c == 0:
+                continue
+            if target_cluster is not None and target_cluster != c:
+                continue
+
+            points.append(target_locations[c][["Z", "Y", "X"]].drop(columns=["level_0", "index"], errors="ignore"))
+
+        points = pd.concat(points)
+        return points
+
+    def _on_show_target_clicked(self):
+        emb_pth = self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path']
+        clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+
+        self.progressbar.setHidden(False)
+        self.progressbar.set_label_text("Calculate target positions")
+
+        target_cluster = self._cluster_dropdown.currentIndex() + 1
+
+        ppe = futures.ProcessPoolExecutor(max_workers=1)
+
+        f= ppe.submit(self.calc_targets, emb_pth, clusters, target_cluster)
+        ppe.shutdown(wait=False)
+        f.add_done_callback(self.target_calc_done.emit)
+
+
+    def show_targets_callback(self, future: futures.Future):
+        points: pd.DataFrame = future.result()
+        point_colors = []
+        colors = get_nice_colormap()
+        import PIL.ImageColor as ImageColor
+
+        c = self._cluster_dropdown.currentIndex() + 1
+
+        rgba = [float(v) / 255
+                for v in list(
+                ImageColor.getcolor(colors[c % len(colors)], "RGB")
+            )
+                ]
+        rgba.append(0.9)
+        point_colors.append(rgba)
+
+        self.delete_points_layer()
+
+        self._target_point_layer = self.viewer.add_points(points,
+                                                          symbol='o',
+                                                          size=37,
+                                                          edge_color=point_colors,
+                                                          face_color="transparent",
+                                                          edge_width=0.10,
+                                                          out_of_slice_display=True,
+                                                          name="Targets")
+
+        self.viewer.dims.set_current_step(0, int(points[['Z']].to_numpy()[0,0]))
+        self.viewer.window._qt_window.setEnabled(True)
+        self.progressbar.setHidden(True)
+        self.progressbar.set_label_text("")
+
+
+    def _on_close_callback(self):
         self.cleanup()
 
-    def add_candidate(self):
+    def _on_add_candidate_clicked(self):
 
         current_row_count = self.tableWidget.rowCount()
         self.tableWidget.setRowCount(current_row_count + 1)
@@ -256,9 +343,10 @@ class ClusteringWidgetQt(QWidget):
     def update_all(self):
         print("Update all", self.plotter_widget.layer_select.value.name)
         cls = []
-        if 'MANUAL_CLUSTER_ID' in self.plotter_widget.layer_select.value.features:
+        if hasattr(self.plotter_widget.layer_select.value, 'features') and 'MANUAL_CLUSTER_ID' in self.plotter_widget.layer_select.value.features:
             cls = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
         self.update_items_cluster_dropdown(self._cluster_dropdown, cls)
+
 
     def update_items_cluster_dropdown(self, dropdown: QComboBox, cluster_ids: list[int]):
 
@@ -274,7 +362,7 @@ class ClusteringWidgetQt(QWidget):
 
     def _on_refine_click(self):
         self.viewer.window._qt_window.setEnabled(False)
-        # self.delete_points_layer()
+        self.delete_points_layer()
         self.reestimate_umap()
 
     def get_current_cluster_dropdown(self):
