@@ -313,13 +313,19 @@ class ClusteringWidgetQt(QWidget):
     def _table_name_changed(self, item: QTableWidgetItem):
         self.tableWidget.itemChanged.disconnect(self._table_name_changed)
 
-        # Your logic to update the item as needed
+        all_names = []
+        for r in range(self.tableWidget.rowCount()):
+            if r == int(item.row()):
+                continue
+            all_names.append(self.tableWidget.item(r,3).text())
 
         if self.tableWidgetHeaders[item.column()] == 'Label':
-            print("HIER")
             rexpr = r'\/:*?"<>| '
             translation_table = str.maketrans(rexpr,"_"*len(rexpr))
             new_target_name = str(item.text()).translate(translation_table)
+            if new_target_name == 'None' or new_target_name in all_names:
+                new_target_name = 'None'
+                notifications.show_error("Label already exists")
             item.setText(new_target_name)
             id_item = self.tableWidget.item(item.row(), 0)
             target = self.target_manger.get_target_by_id(int(id_item.text()))
