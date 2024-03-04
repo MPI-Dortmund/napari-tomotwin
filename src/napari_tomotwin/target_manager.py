@@ -1,12 +1,15 @@
 from dataclasses import dataclass, field
 from itertools import count
 import numpy as np
+from napari.layers import Labels
 
 @dataclass
 class Target:
 
     embeddings_path: str
     embeddings_mask: np.array
+    layer: Labels = field(compare=False)
+    cluster_id: int = field(compare=False)
     target_color: list[int] = field(compare=False)
     target_id: int = field(default_factory=count().__next__, compare=False)
     target_name: str = field(compare=False, default=f"None")

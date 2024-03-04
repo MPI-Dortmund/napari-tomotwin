@@ -12,6 +12,9 @@ from napari_clusters_plotter._utilities import get_nice_colormap
 from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 from napari_tomotwin.make_targets_widget import _make_targets, _get_medoid_embedding
 from napari.qt.threading import thread_worker
+from napari_clusters_plotter._utilities import (
+    get_layer_tabular_data,
+)
 
 from napari_tomotwin.load_umap import LoadUmapTool
 from qtpy.QtCore import Qt
@@ -144,8 +147,13 @@ class ClusteringWidgetQt(QWidget):
         ## Save
         self.save = QPushButton("Save candidates", self)
         self.save.clicked.connect(self._save_candidate_click)
-
         self.layout().addWidget(self.save)
+
+        ## Progressbar layout
+        pbar_layout = QHBoxLayout()
+        pbar_layout.addWidget(self.pbar_label)
+        pbar_layout.addWidget(self.progressbar)
+        layout.addRow("",pbar_layout)
         self.setMinimumHeight(300)
 
     def get_umap_tool(self) -> LoadUmapTool:
@@ -159,6 +167,7 @@ class ClusteringWidgetQt(QWidget):
         action_show = QAction("Show", self)
         action_delete = QAction("Delete", self)
         action_delete.triggered.connect(self.delete_candidate)
+        action_show.triggered.connect(self.show_candidate)
         context_menu.addAction(action_show)
         context_menu.addAction(action_delete)
         context_menu.exec_(self.tableWidget.mapToGlobal(pos))
@@ -171,6 +180,48 @@ class ClusteringWidgetQt(QWidget):
         except:
             return False
         return True
+
+    def replot_cluster_plotter(self):
+
+        clustering_ID = self.plotter_widget.plot_cluster_id.currentText()
+
+        features = get_layer_tabular_data(self.plotter_widget.layer_select.value)
+
+        # redraw the whole plot
+        try:
+            self.plotter_widget.run(
+                features,
+                'umap_0',
+                'umap_1',
+                plot_cluster_name=clustering_ID,
+                force_redraw=True
+            )
+
+        except AttributeError:
+            # In this case, replotting is not yet possible
+            pass
+
+
+    def show_candidate(self):
+
+        if self.tableWidget.currentItem() is None:
+            return
+        selected_row = self.tableWidget.currentRow()
+        if selected_row >= 0:
+            first_column_item = self.tableWidget.item(selected_row, 0)
+
+            id = int(first_column_item.text())
+
+            target = self.target_manger.get_target_by_id(id)
+            self.plotter_widget.layer_select.value = target.layer
+            clids = np.zeros(shape=target.embeddings_mask.shape, dtype=np.int64)
+            clids[target.embeddings_mask] = target.cluster_id
+            print("CLSUTER ID IS", target.cluster_id)
+            self.plotter_widget.layer_select.value.features["MANUAL_CLUSTER_ID"] = clids
+            self.replot_cluster_plotter()
+            self.update_all()
+
+
 
     def set_plotter_widget(self, plotter_widget: PlotterWidget):
         self.plotter_widget = plotter_widget
@@ -356,8 +407,9 @@ class ClusteringWidgetQt(QWidget):
     def make_target(self,cluster_id):
         embeddings_mask = self.plotter_widget.layer_select.value.features["MANUAL_CLUSTER_ID"]==cluster_id
         embeddings_path = self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path']
+        layer = self.plotter_widget.layer_select.value
         color = self.index_to_rgba(cluster_id)
-        target = Target(embeddings_path, embeddings_mask, color)
+        target = Target(embeddings_path, embeddings_mask, layer, cluster_id, color)
         return target
 
 
@@ -370,7 +422,6 @@ class ClusteringWidgetQt(QWidget):
         target_added_succesfull = self.target_manger.add_target(target)
         if not target_added_succesfull:
             return
-        print("TARGET ID IS", target.target_id)
         current_row_count = self.tableWidget.rowCount()
         self.tableWidget.setRowCount(current_row_count + 1)
         self.added_canditates = self.added_canditates + 1
