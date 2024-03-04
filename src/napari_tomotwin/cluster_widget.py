@@ -133,7 +133,7 @@ class ClusteringWidgetQt(QWidget):
 
         self.tableWidget.setSelectionBehavior(QTableWidget.SelectRows)
         self.tableWidget.setSelectionMode(QTableWidget.SingleSelection)
-        self.tableWidget.itemChanged.connect(self._table_name_changed)
+        self.tableWidget.itemChanged.connect(self._table_item_name_changed)
 
         self.tableWidget.setContextMenuPolicy(Qt.CustomContextMenu)
 
@@ -328,8 +328,8 @@ class ClusteringWidgetQt(QWidget):
     def _on_close_callback(self):
         self.cleanup()
 
-    def _table_name_changed(self, item: QTableWidgetItem):
-        self.tableWidget.itemChanged.disconnect(self._table_name_changed)
+    def _table_item_name_changed(self, item: QTableWidgetItem):
+        self.tableWidget.itemChanged.disconnect(self._table_item_name_changed)
 
         all_names = []
         for r in range(self.tableWidget.rowCount()):
@@ -340,9 +340,8 @@ class ClusteringWidgetQt(QWidget):
                 all_names.append(lbl)
 
         if self.tableWidgetHeaders[item.column()] == 'Label':
-            rexpr = r'\/:*?"<>| '
-            translation_table = str.maketrans(rexpr,"_"*len(rexpr))
-            new_target_name = str(item.text()).translate(translation_table)
+            import re
+            new_target_name = re.sub("[^\d\w\-_]", "_", str(item.text()), flags=re.ASCII)
             if new_target_name in all_names:
                 new_target_name = 'None'
                 notifications.show_error("Label already exists")
@@ -352,7 +351,7 @@ class ClusteringWidgetQt(QWidget):
             target.target_name = new_target_name
 
 
-        self.tableWidget.itemChanged.connect(self._table_name_changed)
+        self.tableWidget.itemChanged.connect(self._table_item_name_changed)
 
     def make_target(self,cluster_id):
         embeddings_mask = self.plotter_widget.layer_select.value.features["MANUAL_CLUSTER_ID"]==cluster_id
