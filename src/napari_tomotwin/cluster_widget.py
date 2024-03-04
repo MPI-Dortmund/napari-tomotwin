@@ -11,6 +11,8 @@ from napari_clusters_plotter._plotter import PlotterWidget
 from napari_clusters_plotter._utilities import get_nice_colormap
 from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 from napari_tomotwin.make_targets_widget import _make_targets, _get_medoid_embedding
+from napari.qt.threading import thread_worker
+
 from napari_tomotwin.load_umap import LoadUmapTool
 from qtpy.QtCore import Qt
 from qtpy.QtCore import Signal
@@ -262,9 +264,17 @@ class ClusteringWidgetQt(QWidget):
         points = pd.concat(points)
         return points
 
-    def _save_candidate_click(self):
+    @thread_worker
+    def save_worker(self, output_path):
+        self.target_manger.save_to_disk(output_path)
 
-        pass
+    def _save_candidate_click(self):
+        pth = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
+        if pth is not None and pth != "":
+            self.progressbar.setHidden(False)
+            wsave = self.save_worker(pth)
+            wsave.finished.connect(lambda: self.progressbar.hide())
+            wsave.start()
 
     def _on_show_target_clicked(self):
         emb_pth = self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path']
