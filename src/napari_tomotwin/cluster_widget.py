@@ -319,7 +319,11 @@ class ClusteringWidgetQt(QWidget):
             print("HIER")
             rexpr = r'\/:*?"<>| '
             translation_table = str.maketrans(rexpr,"_"*len(rexpr))
-            item.setText(str(item.text()).translate(translation_table))
+            new_target_name = str(item.text()).translate(translation_table)
+            item.setText(new_target_name)
+            id_item = self.tableWidget.item(item.row(), 0)
+            target = self.target_manger.get_target_by_id(int(id_item.text()))
+            target.target_name = new_target_name
 
 
         self.tableWidget.itemChanged.connect(self._table_name_changed)
@@ -361,6 +365,7 @@ class ClusteringWidgetQt(QWidget):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
             self.tableWidget.setItem(current_row_count, col, item)
+
 
     def napari_update_umap(self, umap_embeddings, used_embeddings):
 

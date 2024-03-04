@@ -34,3 +34,9 @@ class TargetManager:
 
     def remove_target(self, target_ids: list[int]):
         self.targets = [t for t in self.targets if t.target_id not in target_ids]
+
+    def get_target_by_id(self, id: int):
+        for t in self.targets:
+            if t.target_id == id:
+                return t
+        return None
