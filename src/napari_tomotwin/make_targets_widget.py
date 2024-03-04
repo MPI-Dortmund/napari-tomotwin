@@ -113,9 +113,7 @@ def _run(clusters,
 
 
 @thread_worker
-def _run_worker(embeddings_filepath, label_layer, output_folder: str, average_method_name: str):
-    print("Read clusters")
-    clusters = label_layer.features['MANUAL_CLUSTER_ID']
+def _run_worker(embeddings_filepath, clusters, output_folder: str, average_method_name: str):
 
     print("Read embeddings")
     embeddings = pd.read_pickle(embeddings_filepath)
@@ -165,7 +163,8 @@ def make_targets(
     global pbar
     pbar = tqdm()
     pbar.progressbar.label = "Save targets"
-    worker = _run_worker(embeddings_filepath, label_layer, output_folder, average_method_name) # create "worker" object
+    clusters = label_layer.features['MANUAL_CLUSTER_ID']
+    worker = _run_worker(embeddings_filepath, clusters, output_folder, average_method_name) # create "worker" object
     worker.finished.connect(lambda: pbar.progressbar.hide())
     worker.start()
 

@@ -5,7 +5,7 @@ from concurrent import futures
 
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import QComboBox, QStyledItemDelegate, QHeaderView
+from PyQt5.QtWidgets import QComboBox, QStyledItemDelegate, QHeaderView, QMenu, QAction
 from napari.utils import notifications
 from napari_clusters_plotter._plotter import PlotterWidget
 from napari_clusters_plotter._utilities import get_nice_colormap
@@ -132,21 +132,18 @@ class ClusteringWidgetQt(QWidget):
         self.tableWidget.setSelectionBehavior(QTableWidget.SelectRows)
         self.tableWidget.setSelectionMode(QTableWidget.SingleSelection)
         self.tableWidget.itemChanged.connect(self._table_name_changed)
+
+        self.tableWidget.setContextMenuPolicy(Qt.CustomContextMenu)
+
+        self.tableWidget.customContextMenuRequested.connect(self.show_table_context_menu)
+
         self.layout().addWidget(self.tableWidget)
 
-        ## Save and delete
-        save_delete_layout = QHBoxLayout()
+        ## Save
         self.save = QPushButton("Save candidates", self)
         self.save.clicked.connect(self._save_candidate_click)
-        self.delete = QPushButton("Delete candidates", self)
-        self.delete.clicked.connect(self.delete_candidate)
-        save_delete_layout.addWidget(self.delete)
-        save_delete_layout.addWidget(self.save)
-        self.layout().addRow("", save_delete_layout)
-        pbar_layout = QHBoxLayout()
-        pbar_layout.addWidget(self.pbar_label)
-        pbar_layout.addWidget(self.progressbar)
-        self.layout().addRow("",pbar_layout)
+
+        self.layout().addWidget(self.save)
         self.setMinimumHeight(300)
 
     def get_umap_tool(self) -> LoadUmapTool:
@@ -154,6 +151,15 @@ class ClusteringWidgetQt(QWidget):
             self._load_umap_tool = LoadUmapTool(self.plotter_widget)
             self._load_umap_tool.set_progressbar(self.progressbar)
         return self._load_umap_tool
+
+    def show_table_context_menu(self, pos):
+        context_menu = QMenu(self)
+        action_show = QAction("Show", self)
+        action_delete = QAction("Delete", self)
+        action_delete.triggered.connect(self.delete_candidate)
+        context_menu.addAction(action_show)
+        context_menu.addAction(action_delete)
+        context_menu.exec_(self.tableWidget.mapToGlobal(pos))
 
     @staticmethod
     def check_if_gpu_is_available() -> bool:
@@ -257,7 +263,9 @@ class ClusteringWidgetQt(QWidget):
         return points
 
     def _save_candidate_click(self):
+
         pass
+
     def _on_show_target_clicked(self):
         emb_pth = self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path']
         clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
@@ -317,13 +325,15 @@ class ClusteringWidgetQt(QWidget):
         for r in range(self.tableWidget.rowCount()):
             if r == int(item.row()):
                 continue
-            all_names.append(self.tableWidget.item(r,3).text())
+            lbl = self.tableWidget.item(r,3).text()
+            if lbl != 'None':
+                all_names.append(lbl)
 
         if self.tableWidgetHeaders[item.column()] == 'Label':
             rexpr = r'\/:*?"<>| '
             translation_table = str.maketrans(rexpr,"_"*len(rexpr))
             new_target_name = str(item.text()).translate(translation_table)
-            if new_target_name == 'None' or new_target_name in all_names:
+            if new_target_name in all_names:
                 new_target_name = 'None'
                 notifications.show_error("Label already exists")
             item.setText(new_target_name)
