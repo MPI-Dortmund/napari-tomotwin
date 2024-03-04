@@ -7,6 +7,7 @@ import tempfile
 from concurrent import futures
 from napari_clusters_plotter._plotter import PlotterWidget
 from napari_tomotwin.load_umap import LoadUmapTool
+from napari.utils import notifications
 
 from qtpy.QtWidgets import (
     QFormLayout,
@@ -64,6 +65,11 @@ class UmapToolQt(QWidget):
         def load_umap_btn_clicked():
 
             if self._selected_umap_pth.text() == None or self._selected_umap_pth.text() == "":
+                notifications.show_error("No file selected")
+                return
+
+            if os.path.exists(self._selected_umap_pth.text()) == False:
+                notifications.show_error("Path does not exist.")
                 return
 
             if self.plotter_widget is not None:
@@ -72,6 +78,7 @@ class UmapToolQt(QWidget):
                 if ret == QMessageBox.No:
                     return
                 self.viewer.window.remove_dock_widget(self.plotter_Widget_dock)
+                self.viewer.window.remove_dock_widget(self.cluster_widget_dock)
                 for l in self.load_umap_tool.get_created_layers():
                     self.plotter_widget.layer_select.changed.disconnect()  # otherwise I get an emit loop error
                     self.viewer.layers.remove(l)

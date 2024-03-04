@@ -70,6 +70,11 @@ class LoadUmapTool:
 
     def show_umap(self, label_layer):
 
+        if label_layer is None:
+            self.viewer.window._qt_window.setEnabled(True)
+
+            notifications.show_error("Can't load umap")
+
         valid = self.check_umap_metadata()
 
         if not valid:
@@ -113,6 +118,9 @@ class LoadUmapTool:
             worker.start()
 
         except:
+            notifications.show_error("Can't load umap")
+            self.hide_progress_bar()
+            napari.current_viewer().window._qt_window.setEnabled(True)
             pass
 
     def get_created_layers(self) -> List[any]:
@@ -196,6 +204,9 @@ class LoadUmapTool:
         self.update_progress_bar("Read umap")
         self.umap = pd.read_pickle(filename)
         self.update_progress_bar("Generate label layer")
+
+        if 'umap_0' not in self.umap:
+            return None
 
 
         lbl_data = self.relabel_and_update()
