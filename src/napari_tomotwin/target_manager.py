@@ -74,10 +74,6 @@ class TargetManager:
         os.makedirs(output_folder, exist_ok="True")
         pth_ref = os.path.join(output_folder, "cluster_targets.temb")
         df_targets.to_pickle(pth_ref)
-
-        print("Print target locations")
-        print(df_targets[['filepath']])
-        print(df_targets[['filepath']].shape)
         for pos_i, df_loc in enumerate(all_positions):
             clname = df_targets[['filepath']].iloc[pos_i].to_string(header=False, index=False)
             if df_loc is not None and len(df_loc) > 0:
