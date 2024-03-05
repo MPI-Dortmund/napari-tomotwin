@@ -5,12 +5,21 @@ from concurrent import futures
 
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import QComboBox, QStyledItemDelegate, QHeaderView, QMenu, QAction
+from PyQt5.QtWidgets import (
+    QComboBox,
+    QStyledItemDelegate,
+    QHeaderView,
+    QMenu,
+    QAction,
+)
 from napari.utils import notifications
 from napari_clusters_plotter._plotter import PlotterWidget
 from napari_clusters_plotter._utilities import get_nice_colormap
 from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
-from napari_tomotwin.make_targets_widget import _make_targets, _get_medoid_embedding
+from napari_tomotwin.make_targets_widget import (
+    _make_targets,
+    _get_medoid_embedding,
+)
 from napari.qt.threading import thread_worker
 from napari_clusters_plotter._utilities import (
     get_layer_tabular_data,
@@ -31,7 +40,7 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QListView,
     QTableWidgetItem,
-    QTableWidget
+    QTableWidget,
 )
 
 from . import umap_refiner as urefine
@@ -47,19 +56,23 @@ class ColorItemDelegate(QStyledItemDelegate):
 
     def sizeHint(self, option, index):
         # Set the size of the item
-        return index.data(Qt.SizeHintRole) if index.data(Qt.SizeHintRole) else super().sizeHint(option, index)
+        return (
+            index.data(Qt.SizeHintRole)
+            if index.data(Qt.SizeHintRole)
+            else super().sizeHint(option, index)
+        )
 
 
 class QClusterPixmap(QPixmap):
 
-    #def __init__(self):
+    # def __init__(self):
     #    super().__init__(10,10)
     #    #print("INIT")
     #    #self.cluster = None
 
     def set_cluster(self, cluster: int):
         pass
-        #self.cluster = cluster
+        # self.cluster = cluster
 
     def get_cluster(self) -> int:
         return self.cluster
@@ -89,7 +102,9 @@ class ClusteringWidgetQt(QWidget):
         ######
         layout = QFormLayout()
         app = QApplication.instance()
-        app.lastWindowClosed.connect(self._on_close_callback)  # this line is connection to signal
+        app.lastWindowClosed.connect(
+            self._on_close_callback
+        )  # this line is connection to signal
         layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         self.setLayout(layout)
 
@@ -99,7 +114,8 @@ class ClusteringWidgetQt(QWidget):
         self._recalc_umap.clicked.connect(self._on_refine_click)
         self._recalc_umap.setEnabled(False)
         self._recalc_umap.setToolTip(
-            "Takes the embeddings assigned to a cluster and calculates a new UMAP based on these embeddings. This can be helpful to pinpoint the region that encodes the center of the protein or to clean clusters from unwanted embeddings.")
+            "Takes the embeddings assigned to a cluster and calculates a new UMAP based on these embeddings. This can be helpful to pinpoint the region that encodes the center of the protein or to clean clusters from unwanted embeddings."
+        )
         self.nvidia_available = self.check_if_gpu_is_available()
         if not self.nvidia_available:
             self.nvidia_available = False
@@ -109,7 +125,9 @@ class ClusteringWidgetQt(QWidget):
         self._cluster_dropdown = self.get_current_cluster_dropdown()
         self._show_targets = QPushButton("Show target", self)
         self._show_targets.clicked.connect(self._on_show_target_clicked)
-        self._show_targets.setToolTip("For the selected cluster it estimates the target embedding (medoid) and visualizes its position in the tomogram with the same edge color as the cluster.")
+        self._show_targets.setToolTip(
+            "For the selected cluster it estimates the target embedding (medoid) and visualizes its position in the tomogram with the same edge color as the cluster."
+        )
 
         self.target_calc_done.connect(self.show_targets_callback)
 
@@ -143,7 +161,9 @@ class ClusteringWidgetQt(QWidget):
 
         self.tableWidget.setContextMenuPolicy(Qt.CustomContextMenu)
 
-        self.tableWidget.customContextMenuRequested.connect(self.show_table_context_menu)
+        self.tableWidget.customContextMenuRequested.connect(
+            self.show_table_context_menu
+        )
 
         self.layout().addWidget(self.tableWidget)
 
@@ -156,7 +176,7 @@ class ClusteringWidgetQt(QWidget):
         pbar_layout = QHBoxLayout()
         pbar_layout.addWidget(self.pbar_label)
         pbar_layout.addWidget(self.progressbar)
-        layout.addRow("",pbar_layout)
+        layout.addRow("", pbar_layout)
         self.setMinimumHeight(300)
 
     def get_umap_tool(self) -> LoadUmapTool:
@@ -188,22 +208,23 @@ class ClusteringWidgetQt(QWidget):
 
         clustering_ID = self.plotter_widget.plot_cluster_id.currentText()
 
-        features = get_layer_tabular_data(self.plotter_widget.layer_select.value)
+        features = get_layer_tabular_data(
+            self.plotter_widget.layer_select.value
+        )
 
         # redraw the whole plot
         try:
             self.plotter_widget.run(
                 features,
-                'umap_0',
-                'umap_1',
+                "umap_0",
+                "umap_1",
                 plot_cluster_name=clustering_ID,
-                force_redraw=True
+                force_redraw=True,
             )
 
         except AttributeError:
             # In this case, replotting is not yet possible
             pass
-
 
     def show_candidate(self):
 
@@ -217,19 +238,23 @@ class ClusteringWidgetQt(QWidget):
 
             target = self.target_manger.get_target_by_id(id)
             self.plotter_widget.layer_select.value = target.layer
-            clids = np.zeros(shape=target.embeddings_mask.shape, dtype=np.int64)
+            clids = np.zeros(
+                shape=target.embeddings_mask.shape, dtype=np.int64
+            )
             clids[target.embeddings_mask] = target.cluster_id
             print("CLSUTER ID IS", target.cluster_id)
-            self.plotter_widget.layer_select.value.features["MANUAL_CLUSTER_ID"] = clids
+            self.plotter_widget.layer_select.value.features[
+                "MANUAL_CLUSTER_ID"
+            ] = clids
             self.replot_cluster_plotter()
             self.update_all()
-
-
 
     def set_plotter_widget(self, plotter_widget: PlotterWidget):
         self.plotter_widget = plotter_widget
         self.plotter_widget_run_func = self.plotter_widget.run
-        self.plotter_widget.graphics_widget.mpl_connect('draw_event', lambda _: self.after_draw_event())
+        self.plotter_widget.graphics_widget.mpl_connect(
+            "draw_event", lambda _: self.after_draw_event()
+        )
 
     def delete_candidate(self):
         if self.tableWidget.currentItem() is None:
@@ -239,14 +264,12 @@ class ClusteringWidgetQt(QWidget):
 
             first_column_item = self.tableWidget.item(selected_row, 0)
 
-
             id = int(first_column_item.text())
             self.target_manger.remove_target([id])
 
             self.tableWidget.removeRow(selected_row)
             self.tableWidget.clearSelection()
             self.tableWidget.setCurrentItem(None)
-
 
     def delete_points_layer(self):
         if self._target_point_layer is not None:
@@ -263,10 +286,15 @@ class ClusteringWidgetQt(QWidget):
             # The target points layer should get deleted when clusters are reseted
             # Furthermore, the button to calculate the targest should get disabled
             no_clusters = True
-            if 'MANUAL_CLUSTER_ID' in self.plotter_widget.layer_select.value.features:
-                clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+            if (
+                "MANUAL_CLUSTER_ID"
+                in self.plotter_widget.layer_select.value.features
+            ):
+                clusters = self.plotter_widget.layer_select.value.features[
+                    "MANUAL_CLUSTER_ID"
+                ]
                 ucl = np.unique(clusters)
-                no_clusters = len(ucl)==1
+                no_clusters = len(ucl) == 1
 
             if no_clusters:  # 1=only background cluster
                 self.delete_points_layer()
@@ -293,15 +321,24 @@ class ClusteringWidgetQt(QWidget):
             pass
 
     @staticmethod
-    def calc_targets(embedding_path: str, clusters: np.array, target_cluster: int) -> pd.DataFrame:
+    def calc_targets(
+        embedding_path: str, clusters: np.array, target_cluster: int
+    ) -> pd.DataFrame:
         # get embeddings
         embeddings = pd.read_pickle(embedding_path)
-        embeddings = embeddings.drop(columns=["level_0", "index"], errors="ignore")
+        embeddings = embeddings.drop(
+            columns=["level_0", "index"], errors="ignore"
+        )
 
         # get clusters
 
         # calculate target positions
-        _, _, target_locations = _make_targets(embeddings=embeddings, clusters=clusters, avg_func=_get_medoid_embedding, target_cluster=target_cluster)
+        _, _, target_locations = _make_targets(
+            embeddings=embeddings,
+            clusters=clusters,
+            avg_func=_get_medoid_embedding,
+            target_cluster=target_cluster,
+        )
 
         # Create points coords
 
@@ -313,7 +350,11 @@ class ClusteringWidgetQt(QWidget):
             if target_cluster is not None and target_cluster != c:
                 continue
 
-            points.append(target_locations[c][["Z", "Y", "X"]].drop(columns=["level_0", "index"], errors="ignore"))
+            points.append(
+                target_locations[c][["Z", "Y", "X"]].drop(
+                    columns=["level_0", "index"], errors="ignore"
+                )
+            )
 
         points = pd.concat(points)
         return points
@@ -331,8 +372,12 @@ class ClusteringWidgetQt(QWidget):
             wsave.start()
 
     def _on_show_target_clicked(self):
-        emb_pth = self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path']
-        clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+        emb_pth = self.plotter_widget.layer_select.value.metadata["tomotwin"][
+            "embeddings_path"
+        ]
+        clusters = self.plotter_widget.layer_select.value.features[
+            "MANUAL_CLUSTER_ID"
+        ]
 
         self.progressbar.setHidden(False)
         self.progressbar.set_label_text("Calculate target positions")
@@ -341,10 +386,9 @@ class ClusteringWidgetQt(QWidget):
 
         ppe = futures.ProcessPoolExecutor(max_workers=1)
 
-        f= ppe.submit(self.calc_targets, emb_pth, clusters, target_cluster)
+        f = ppe.submit(self.calc_targets, emb_pth, clusters, target_cluster)
         ppe.shutdown(wait=False)
         f.add_done_callback(self.target_calc_done.emit)
-
 
     def show_targets_callback(self, future: futures.Future):
         points: pd.DataFrame = future.result()
@@ -354,30 +398,32 @@ class ClusteringWidgetQt(QWidget):
 
         c = self._cluster_dropdown.currentData(Qt.UserRole)
 
-        rgba = [float(v) / 255
-                for v in list(
-                ImageColor.getcolor(colors[c % len(colors)], "RGB")
-            )
-                ]
+        rgba = [
+            float(v) / 255
+            for v in list(ImageColor.getcolor(colors[c % len(colors)], "RGB"))
+        ]
         rgba.append(0.9)
         point_colors.append(rgba)
 
         self.delete_points_layer()
 
-        self._target_point_layer = self.viewer.add_points(points,
-                                                          symbol='o',
-                                                          size=37,
-                                                          edge_color=point_colors,
-                                                          face_color="transparent",
-                                                          edge_width=0.10,
-                                                          out_of_slice_display=True,
-                                                          name="Targets")
+        self._target_point_layer = self.viewer.add_points(
+            points,
+            symbol="o",
+            size=37,
+            edge_color=point_colors,
+            face_color="transparent",
+            edge_width=0.10,
+            out_of_slice_display=True,
+            name="Targets",
+        )
 
-        self.viewer.dims.set_current_step(0, int(points[['Z']].to_numpy()[0,0]))
+        self.viewer.dims.set_current_step(
+            0, int(points[["Z"]].to_numpy()[0, 0])
+        )
         self.viewer.window._qt_window.setEnabled(True)
         self.progressbar.setHidden(True)
         self.progressbar.set_label_text("")
-
 
     def _on_close_callback(self):
         self.cleanup()
@@ -389,33 +435,42 @@ class ClusteringWidgetQt(QWidget):
         for r in range(self.tableWidget.rowCount()):
             if r == int(item.row()):
                 continue
-            lbl = self.tableWidget.item(r,3).text()
-            if lbl != 'None':
+            lbl = self.tableWidget.item(r, 3).text()
+            if lbl != "None":
                 all_names.append(lbl)
 
-        if self.tableWidgetHeaders[item.column()] == 'Label':
+        if self.tableWidgetHeaders[item.column()] == "Label":
             import re
-            new_target_name = re.sub("[^\d\w\-_]", "_", str(item.text()), flags=re.ASCII)
+
+            new_target_name = re.sub(
+                "[^\d\w\-_]", "_", str(item.text()), flags=re.ASCII
+            )
             if new_target_name in all_names:
-                new_target_name = 'None'
+                new_target_name = "None"
                 notifications.show_error("Label already exists")
             item.setText(new_target_name)
             id_item = self.tableWidget.item(item.row(), 0)
             target = self.target_manger.get_target_by_id(int(id_item.text()))
             target.target_name = new_target_name
 
-
         self.tableWidget.itemChanged.connect(self._table_item_name_changed)
 
-    def make_target(self,cluster_id):
-        embeddings_mask = self.plotter_widget.layer_select.value.features["MANUAL_CLUSTER_ID"]==cluster_id
-        embeddings_path = self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path']
+    def make_target(self, cluster_id):
+        embeddings_mask = (
+            self.plotter_widget.layer_select.value.features[
+                "MANUAL_CLUSTER_ID"
+            ]
+            == cluster_id
+        )
+        embeddings_path = self.plotter_widget.layer_select.value.metadata[
+            "tomotwin"
+        ]["embeddings_path"]
         layer = self.plotter_widget.layer_select.value
         color = self.index_to_rgba(cluster_id)
-        target = Target(embeddings_path, embeddings_mask, layer, cluster_id, color)
+        target = Target(
+            embeddings_path, embeddings_mask, layer, cluster_id, color
+        )
         return target
-
-
 
     def _on_add_candidate_clicked(self):
 
@@ -429,8 +484,12 @@ class ClusteringWidgetQt(QWidget):
         self.tableWidget.setRowCount(current_row_count + 1)
         self.added_canditates = self.added_canditates + 1
 
-
-        entry = [f"{target.target_id}", "", self.plotter_widget.layer_select.value.name, target.target_name]
+        entry = [
+            f"{target.target_id}",
+            "",
+            self.plotter_widget.layer_select.value.name,
+            target.target_name,
+        ]
         for col, value in enumerate(entry):
             item = QTableWidgetItem(value)
             if col == 0:
@@ -445,14 +504,17 @@ class ClusteringWidgetQt(QWidget):
 
             self.tableWidget.setItem(current_row_count, col, item)
 
-
     def napari_update_umap(self, umap_embeddings, used_embeddings):
 
         self.tmp_dir_path = tempfile.mkdtemp()
-        tmp_embed_pth = os.path.join(self.tmp_dir_path, next(tempfile._get_candidate_names()))
+        tmp_embed_pth = os.path.join(
+            self.tmp_dir_path, next(tempfile._get_candidate_names())
+        )
         used_embeddings.to_pickle(tmp_embed_pth)
-        umap_embeddings.attrs['embeddings_path'] = tmp_embed_pth
-        tmp_umap_pth = os.path.join(self.tmp_dir_path, next(tempfile._get_candidate_names()))
+        umap_embeddings.attrs["embeddings_path"] = tmp_embed_pth
+        tmp_umap_pth = os.path.join(
+            self.tmp_dir_path, next(tempfile._get_candidate_names())
+        )
         umap_embeddings.to_pickle(tmp_umap_pth)
 
         # Visualizse it
@@ -471,22 +533,31 @@ class ClusteringWidgetQt(QWidget):
     def index_to_rgba(index: int) -> list[int]:
         colors = get_nice_colormap()
         import PIL.ImageColor as ImageColor
-        rgba = [int(v)
-                for v in list(
+
+        rgba = [
+            int(v)
+            for v in list(
                 ImageColor.getcolor(colors[index % len(colors)], "RGB")
             )
-                ]
+        ]
         rgba.append(int(255 * 0.9))
         return rgba
 
     def update_all(self):
         cls = []
-        if hasattr(self.plotter_widget.layer_select.value, 'features') and 'MANUAL_CLUSTER_ID' in self.plotter_widget.layer_select.value.features:
-            cls = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+        if (
+            hasattr(self.plotter_widget.layer_select.value, "features")
+            and "MANUAL_CLUSTER_ID"
+            in self.plotter_widget.layer_select.value.features
+        ):
+            cls = self.plotter_widget.layer_select.value.features[
+                "MANUAL_CLUSTER_ID"
+            ]
         self.update_items_cluster_dropdown(self._cluster_dropdown, cls)
 
-
-    def update_items_cluster_dropdown(self, dropdown: QComboBox, cluster_ids: list[int]):
+    def update_items_cluster_dropdown(
+        self, dropdown: QComboBox, cluster_ids: list[int]
+    ):
 
         dropdown.clear()
         for c in np.unique(cluster_ids):
@@ -494,9 +565,11 @@ class ClusteringWidgetQt(QWidget):
                 continue
             rgba = self.index_to_rgba(c)
             dropdown.addItem("")
-            pixmap = QPixmap(10,10)
+            pixmap = QPixmap(10, 10)
             pixmap.fill(QColor(*rgba))
-            dropdown.setItemData(dropdown.count() - 1, pixmap, Qt.DecorationRole)
+            dropdown.setItemData(
+                dropdown.count() - 1, pixmap, Qt.DecorationRole
+            )
             dropdown.setItemData(dropdown.count() - 1, c, Qt.UserRole)
 
     def _on_refine_click(self):
@@ -506,13 +579,17 @@ class ClusteringWidgetQt(QWidget):
 
     def get_current_cluster_dropdown(self):
         color_dropdown = QComboBox(self)
-        color_dropdown.setSizeAdjustPolicy(QComboBox.AdjustToContentsOnFirstShow)
+        color_dropdown.setSizeAdjustPolicy(
+            QComboBox.AdjustToContentsOnFirstShow
+        )
         return color_dropdown
 
     def reestimate_umap(self):
         try:
             print("Read clusters")
-            clusters = self.plotter_widget.layer_select.value.features['MANUAL_CLUSTER_ID']
+            clusters = self.plotter_widget.layer_select.value.features[
+                "MANUAL_CLUSTER_ID"
+            ]
             if not np.any(clusters > 0):
                 raise KeyError
         except KeyError:
@@ -520,33 +597,43 @@ class ClusteringWidgetQt(QWidget):
             return
 
         def get_embedding_path(pth: str) -> str:
-            '''
+            """
             Checks if the embedding path exists. If it does not exist, it opens a file selection dialogue. Otherwise it returns the path.
-            '''
+            """
             if not os.path.exists(pth):
                 msg = QMessageBox()
                 msg.setIcon(QMessageBox.Critical)
                 msg.setWindowTitle("Can't open embedding file")
                 msg.setText("Can't open embedding file")
                 msg.setInformativeText(
-                    "Embedding path in metadata data (see below) does not exist or can't be accesst. Please click OK and select the path to the embedding file.")
+                    "Embedding path in metadata data (see below) does not exist or can't be accesst. Please click OK and select the path to the embedding file."
+                )
                 msg.setDetailedText(pth)
                 msg.setStandardButtons(QMessageBox.Ok)
                 msg.exec_()
-                pth = QFileDialog.getOpenFileName(self, 'Open embedding file',
-                                                  os.getcwd(),
-                                                  "Embedding file (*.temb)")[0]
+                pth = QFileDialog.getOpenFileName(
+                    self,
+                    "Open embedding file",
+                    os.getcwd(),
+                    "Embedding file (*.temb)",
+                )[0]
 
             return pth
 
         print("Read embeddings")
-        emb_pth = get_embedding_path(self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'])
+        emb_pth = get_embedding_path(
+            self.plotter_widget.layer_select.value.metadata["tomotwin"][
+                "embeddings_path"
+            ]
+        )
 
         if emb_pth == "":
             print("No path selected.")
             return
 
-        self.plotter_widget.layer_select.value.metadata['tomotwin']['embeddings_path'] = emb_pth
+        self.plotter_widget.layer_select.value.metadata["tomotwin"][
+            "embeddings_path"
+        ] = emb_pth
         embeddings = pd.read_pickle(emb_pth)
 
         self.progressbar.setHidden(False)

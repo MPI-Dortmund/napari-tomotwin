@@ -3,6 +3,7 @@ from itertools import count
 import numpy as np
 from napari.layers import Labels
 
+
 @dataclass
 class Target:
 
@@ -14,17 +15,17 @@ class Target:
     target_id: int = field(default_factory=count().__next__, compare=False)
     target_name: str = field(compare=False, default=f"None")
 
-
     def __eq__(self, other):
-        return np.array_equal(self.embeddings_mask, other.embeddings_mask) and self.embeddings_path == other.embeddings_path
-
+        return (
+            np.array_equal(self.embeddings_mask, other.embeddings_mask)
+            and self.embeddings_path == other.embeddings_path
+        )
 
 
 class TargetManager:
 
     def __init__(self):
-        self.targets : list[Target] = []
-
+        self.targets: list[Target] = []
 
     def add_target(self, target: Target) -> bool:
 
@@ -35,9 +36,10 @@ class TargetManager:
         self.targets.append(target)
         return True
 
-
     def remove_target(self, target_ids: list[int]):
-        self.targets = [t for t in self.targets if t.target_id not in target_ids]
+        self.targets = [
+            t for t in self.targets if t.target_id not in target_ids
+        ]
 
     def get_target_by_id(self, id: int):
         for t in self.targets:
@@ -64,7 +66,7 @@ class TargetManager:
             alL_medoids.append(medoid)
 
             all_positions.append(position)
-            if target.target_name == 'None':
+            if target.target_name == "None":
                 all_target_names.append(f"cluser_{target.target_id}")
             else:
                 all_target_names.append(target.target_name)
@@ -78,14 +80,25 @@ class TargetManager:
         pth_ref = os.path.join(output_folder, "cluster_targets.temb")
         df_targets.to_pickle(pth_ref)
         for pos_i, df_loc in enumerate(all_positions):
-            clname = df_targets[['filepath']].iloc[pos_i].to_string(header=False, index=False)
+            clname = (
+                df_targets[["filepath"]]
+                .iloc[pos_i]
+                .to_string(header=False, index=False)
+            )
             if df_loc is not None and len(df_loc) > 0:
-                pth_loc = os.path.join(output_folder, f"medoid_{clname}.coords")
-                df_loc[["X", "Y", "Z"]].to_csv(pth_loc, sep=" ", header=None, index=None)
+                pth_loc = os.path.join(
+                    output_folder, f"medoid_{clname}.coords"
+                )
+                df_loc[["X", "Y", "Z"]].to_csv(
+                    pth_loc, sep=" ", header=None, index=None
+                )
 
         print("Write custer embeddings")
         for emb_i, emb in enumerate(all_sub_embeddings):
-            clname = df_targets[['filepath']].iloc[emb_i].to_string(header=False, index=False)
+            clname = (
+                df_targets[["filepath"]]
+                .iloc[emb_i]
+                .to_string(header=False, index=False)
+            )
             pth_emb = os.path.join(output_folder, f"embeddings_{clname}.temb")
             emb.to_pickle(pth_emb)
-

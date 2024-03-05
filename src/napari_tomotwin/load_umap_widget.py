@@ -1,6 +1,6 @@
 import multiprocessing
 
-multiprocessing.set_start_method('spawn', force=True)
+multiprocessing.set_start_method("spawn", force=True)
 import os
 import os.path
 import tempfile
@@ -18,7 +18,7 @@ from qtpy.QtWidgets import (
     QLabel,
     QHBoxLayout,
     QLineEdit,
-    QDockWidget
+    QDockWidget,
 )
 from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 
@@ -45,9 +45,9 @@ class UmapToolQt(QWidget):
         self._selected_umap_pth = QLineEdit()
 
         def select_file_clicked():
-            pth = QFileDialog.getOpenFileName(self, 'Open UMAP file',
-                                              os.getcwd(),
-                                              "UMAP file (*.tumap)")[0]
+            pth = QFileDialog.getOpenFileName(
+                self, "Open UMAP file", os.getcwd(), "UMAP file (*.tumap)"
+            )[0]
             self._selected_umap_pth.setText(pth)
 
         self._select_umap_pth_btn.clicked.connect(select_file_clicked)
@@ -64,7 +64,10 @@ class UmapToolQt(QWidget):
 
         def load_umap_btn_clicked():
 
-            if self._selected_umap_pth.text() == None or self._selected_umap_pth.text() == "":
+            if (
+                self._selected_umap_pth.text() == None
+                or self._selected_umap_pth.text() == ""
+            ):
                 notifications.show_error("No file selected")
                 return
 
@@ -73,8 +76,12 @@ class UmapToolQt(QWidget):
                 return
 
             if self.plotter_widget is not None:
-                ret = QMessageBox.question(self, '', "Do you really want to close the current UMAP and load another?",
-                                           QMessageBox.Yes | QMessageBox.No)
+                ret = QMessageBox.question(
+                    self,
+                    "",
+                    "Do you really want to close the current UMAP and load another?",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
                 if ret == QMessageBox.No:
                     return
                 self.viewer.window.remove_dock_widget(self.plotter_Widget_dock)
@@ -83,26 +90,33 @@ class UmapToolQt(QWidget):
                     self.plotter_widget.layer_select.changed.disconnect()  # otherwise I get an emit loop error
                     self.viewer.layers.remove(l)
 
-
-            self.plotter_Widget_dock, self.plotter_widget = self.viewer.window.add_plugin_dock_widget(
-                'napari-clusters-plotter',
-                widget_name='Plotter Widget',
-                tabify=False)
+            self.plotter_Widget_dock, self.plotter_widget = (
+                self.viewer.window.add_plugin_dock_widget(
+                    "napari-clusters-plotter",
+                    widget_name="Plotter Widget",
+                    tabify=False,
+                )
+            )
 
             from .cluster_widget import ClusteringWidgetQt
+
             self.cluster_widget = ClusteringWidgetQt(self.viewer)
-            self.cluster_widget_dock  = self.viewer.window.add_dock_widget(self.cluster_widget, area='right', name="UMAP Tools")
+            self.cluster_widget_dock = self.viewer.window.add_dock_widget(
+                self.cluster_widget, area="right", name="UMAP Tools"
+            )
 
-
-            self.load_umap_tool = LoadUmapTool(plotter_widget=self.plotter_widget)
+            self.load_umap_tool = LoadUmapTool(
+                plotter_widget=self.plotter_widget
+            )
             self.load_umap_tool.set_progressbar(self.progressBar)
-
 
             self.cluster_widget.set_plotter_widget(self.plotter_widget)
             self.progressBar.setHidden(False)
 
             self.load_umap_tool.set_new_label_layer_name("UMAP")
-            worker = self.load_umap_tool.start_umap_worker(self._selected_umap_pth.text())
+            worker = self.load_umap_tool.start_umap_worker(
+                self._selected_umap_pth.text()
+            )
             worker.start()
 
         self._load_umap_btn.clicked.connect(load_umap_btn_clicked)
