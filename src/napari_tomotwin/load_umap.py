@@ -11,7 +11,6 @@ from matplotlib.patches import Circle
 from napari.qt.threading import thread_worker
 from napari.utils import notifications
 from napari_clusters_plotter._plotter_utilities import estimate_number_bins
-from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 from napari_tomotwin.anchor_tool import drag_circle_callback
 from qtpy.QtWidgets import (
     QFileDialog,

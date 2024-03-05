@@ -18,7 +18,6 @@ from qtpy.QtWidgets import (
     QLabel,
     QHBoxLayout,
     QLineEdit,
-    QDockWidget,
 )
 from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 

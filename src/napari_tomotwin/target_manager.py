@@ -1,7 +1,12 @@
+import os
 from dataclasses import dataclass, field
 from itertools import count
+
 import numpy as np
+import pandas as pd
 from napari.layers import Labels
+
+from .make_targets import _get_medoid_embedding
 
 
 @dataclass
@@ -48,9 +53,6 @@ class TargetManager:
         return None
 
     def save_to_disk(self, output_folder):
-        import pandas as pd
-        from .make_targets_widget import _get_medoid_embedding
-        import os
 
         alL_medoids = []
         all_sub_embeddings = []

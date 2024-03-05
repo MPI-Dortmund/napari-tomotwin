@@ -12,19 +12,14 @@ from PyQt5.QtWidgets import (
     QMenu,
     QAction,
 )
+from napari.qt.threading import thread_worker
 from napari.utils import notifications
 from napari_clusters_plotter._plotter import PlotterWidget
-from napari_clusters_plotter._utilities import get_nice_colormap
-from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
-from napari_tomotwin.make_targets_widget import (
-    _make_targets,
-    _get_medoid_embedding,
-)
-from napari.qt.threading import thread_worker
 from napari_clusters_plotter._utilities import (
     get_layer_tabular_data,
 )
-
+from napari_clusters_plotter._utilities import get_nice_colormap
+from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 from napari_tomotwin.load_umap import LoadUmapTool
 from qtpy.QtCore import Qt
 from qtpy.QtCore import Signal
@@ -38,12 +33,15 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QLabel,
     QHBoxLayout,
-    QListView,
     QTableWidgetItem,
     QTableWidget,
 )
 
 from . import umap_refiner as urefine
+from .make_targets import (
+    _make_targets,
+    _get_medoid_embedding,
+)
 from .target_manager import TargetManager, Target
 
 
