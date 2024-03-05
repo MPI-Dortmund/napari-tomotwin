@@ -50,16 +50,19 @@ class ColorItemDelegate(QStyledItemDelegate):
         return index.data(Qt.SizeHintRole) if index.data(Qt.SizeHintRole) else super().sizeHint(option, index)
 
 
-class ColorComboBox(QComboBox):
-    def __init__(self):
-        super().__init__()
+class QClusterPixmap(QPixmap):
 
-        # Set the custom item delegate
-        delegate = ColorItemDelegate(self)
-        self.setItemDelegate(delegate)
+    #def __init__(self):
+    #    super().__init__(10,10)
+    #    #print("INIT")
+    #    #self.cluster = None
 
-        # Set the combo box to only display icons
-        self.setView(QListView(self))
+    def set_cluster(self, cluster: int):
+        pass
+        #self.cluster = cluster
+
+    def get_cluster(self) -> int:
+        return self.cluster
 
 
 class ClusteringWidgetQt(QWidget):
@@ -334,7 +337,7 @@ class ClusteringWidgetQt(QWidget):
         self.progressbar.setHidden(False)
         self.progressbar.set_label_text("Calculate target positions")
 
-        target_cluster = self._cluster_dropdown.currentIndex() + 1
+        target_cluster = self._cluster_dropdown.currentData(Qt.UserRole)
 
         ppe = futures.ProcessPoolExecutor(max_workers=1)
 
@@ -349,7 +352,7 @@ class ClusteringWidgetQt(QWidget):
         colors = get_nice_colormap()
         import PIL.ImageColor as ImageColor
 
-        c = self._cluster_dropdown.currentIndex() + 1
+        c = self._cluster_dropdown.currentData(Qt.UserRole)
 
         rgba = [float(v) / 255
                 for v in list(
@@ -416,7 +419,7 @@ class ClusteringWidgetQt(QWidget):
 
     def _on_add_candidate_clicked(self):
 
-        c = self._cluster_dropdown.currentIndex() + 1
+        c = self._cluster_dropdown.currentData(Qt.UserRole)
         target = self.make_target(c)
 
         target_added_succesfull = self.target_manger.add_target(target)
@@ -491,9 +494,10 @@ class ClusteringWidgetQt(QWidget):
                 continue
             rgba = self.index_to_rgba(c)
             dropdown.addItem("")
-            pixmap = QPixmap(10, 10)
+            pixmap = QPixmap(10,10)
             pixmap.fill(QColor(*rgba))
             dropdown.setItemData(dropdown.count() - 1, pixmap, Qt.DecorationRole)
+            dropdown.setItemData(dropdown.count() - 1, c, Qt.UserRole)
 
     def _on_refine_click(self):
         self.viewer.window._qt_window.setEnabled(False)
@@ -551,7 +555,7 @@ class ClusteringWidgetQt(QWidget):
         # this workaround using signal is necessary, as "add_done_callback" starts the method
         # in a separate thread, but to change Qt elements, it must be run in the same thread as the main program.
         ppe = futures.ProcessPoolExecutor(max_workers=1)
-        target_cluster = self._cluster_dropdown.currentIndex() + 1
+        target_cluster = self._cluster_dropdown.currentData(Qt.UserRole)
         f = ppe.submit(urefine.refine, clusters, embeddings, target_cluster)
         ppe.shutdown(wait=False)
         f.add_done_callback(self.refinement_done.emit)
