@@ -58,6 +58,7 @@ class UmapToolQt(QWidget):
         self.plotter_widget: PlotterWidget = None
         self.plotter_widget_run_func = None
         self.plotter_Widget_dock = None
+        self.cluster_widget_dock = None
         self.nvidia_available = True
         self.load_umap_tool: LoadUmapTool
 
