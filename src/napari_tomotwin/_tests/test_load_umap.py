@@ -43,7 +43,7 @@ class MyTestCase(unittest.TestCase):
             umap_df.attrs['embeddings_path'] = ""
             umap_df.to_pickle(f"{tmpdirname}/umap.tumap")
 
-            widget, _ = viewer.window.add_plugin_dock_widget('napari-tomotwin', widget_name='Cluster UMAP embeddings')
+            widget, _ = viewer.window.add_plugin_dock_widget('napari-tomotwin', widget_name='TomoTwin clustering workflow')
             lyr = tool.load_umap(filename=f"{tmpdirname}/umap.tumap")
             viewer.add_layer(lyr)
 
