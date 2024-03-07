@@ -240,7 +240,6 @@ class ClusteringWidgetQt(QWidget):
                 shape=target.embeddings_mask.shape, dtype=np.int64
             )
             clids[target.embeddings_mask] = target.cluster_id
-            print("CLSUTER ID IS", target.cluster_id)
             self.plotter_widget.layer_select.value.features[
                 "MANUAL_CLUSTER_ID"
             ] = clids
@@ -522,7 +521,6 @@ class ClusteringWidgetQt(QWidget):
         # worker.returned.connect(self.update_all)
 
     def show_umap_callback(self, future: futures.Future):
-        print("SHOW")
         (umap_embeddings, used_embeddings) = future.result()
         self.viewer.window._qt_window.setEnabled(True)
         self.napari_update_umap(umap_embeddings, used_embeddings)
