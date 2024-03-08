@@ -18,6 +18,7 @@ dependencies:
   - cuml=23.12
   - cuda-version=11.8
   - git
+  - hdbscan
   - pip
   - pip:
       - napari-boxmanager # Install napari-boxmanager via pip because otherwise scripts in setup.cfg are ignored
