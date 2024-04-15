@@ -29,7 +29,6 @@ def _draw_circle(
     try:
         center = umap_coordinates.values.tolist()[0]
     except IndexError:
-        print("ERROR!!! UAMP")
         return
     modifiers = QGuiApplication.keyboardModifiers()
     if modifiers == Qt.ShiftModifier:
