@@ -94,18 +94,18 @@ class LoadUmapTool:
 
         self.update_progress_bar("Visualize umap")
         self.viewer.add_layer(label_layer)
-
-        label_layer.opacity = 0
-        label_layer.visible = True
         self.created_layers.append(label_layer)
 
         try:
             # napari-clusters-plotter > 0.7.4
+            label_layer.opacity = 0
+            label_layer.visible = True
             self.plotter_widget.layer_select.value = label_layer
         except:
+            print("ERROR!!")
             # napari-clusters-plotter < 0.7.4
             pass
-
+        #self.plotter_widget.manual_label_opacity = 0
         self.plotter_widget.plot_x_axis.setCurrentIndex(3)
         self.plotter_widget.plot_y_axis.setCurrentIndex(4)
         self.plotter_widget.bin_auto.setChecked(True)

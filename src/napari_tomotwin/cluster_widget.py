@@ -303,6 +303,7 @@ class ClusteringWidgetQt(QWidget):
                     self._recalc_umap.setEnabled(True)
                 self._add_candidate.setEnabled(True)
                 self._show_targets.setEnabled(True)
+            self.plotter_widget.layer_select.value.opacity = 0 # hot fix until line 108 in load_umap works (PR must be accepted)
 
         except Exception as e:
             print(e)
@@ -557,7 +558,8 @@ class ClusteringWidgetQt(QWidget):
 
         dropdown.clear()
         for c in np.unique(cluster_ids):
-            if c == 0:
+
+            if c <= 0:
                 continue
             rgba = self.index_to_rgba(c)
             dropdown.addItem("")
