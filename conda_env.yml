@@ -22,4 +22,4 @@ dependencies:
   - pip
   - pip:
       - napari-boxmanager # Install napari-boxmanager via pip because otherwise scripts in setup.cfg are ignored
-      - git+https://github.com/BiAPoL/napari-clusters-plotter.git@b9b08f3500c9b0831d2cd1b4d9a757c688f76005 #until 0.7.4 is released
+      - napari-clusters-plotter
