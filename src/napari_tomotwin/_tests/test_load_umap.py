@@ -46,6 +46,7 @@ class MyTestCase(unittest.TestCase):
             widget, _ = viewer.window.add_plugin_dock_widget('napari-tomotwin', widget_name='TomoTwin clustering workflow')
             lyr = tool.load_umap(filename=f"{tmpdirname}/umap.tumap")
             viewer.add_layer(lyr)
+            viewer.close()
 
             assert True # just make sure that now exception is raised
 
