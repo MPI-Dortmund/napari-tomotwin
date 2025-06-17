@@ -244,6 +244,15 @@ class LoadUmapTool:
 
         return True
 
+    def get_umap_metric(self) -> str:
+        return self.umap.attrs["umap_metric"]
+
+    def get_umap_mode(self) -> str:
+        return self.umap.attrs["embeddings_attrs"]["mode"]
+
+    def get_umap_neighbors(self) -> int:
+        return self.umap.attrs["umap_neighbors"]
+
     def load_umap(self, filename: pathlib.Path):
         self.update_progress_bar("Read umap")
         self.umap = pd.read_pickle(filename)
