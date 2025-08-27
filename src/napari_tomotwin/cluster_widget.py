@@ -177,6 +177,9 @@ class ClusteringWidgetQt(QWidget):
         layout.addRow("", pbar_layout)
         self.setMinimumHeight(300)
 
+    def set_umap_tool(self, tool: LoadUmapTool):
+        self._load_umap_tool = tool
+
     def get_umap_tool(self) -> LoadUmapTool:
         if self._load_umap_tool is None:
             self._load_umap_tool = LoadUmapTool(self.plotter_widget)
@@ -525,6 +528,8 @@ class ClusteringWidgetQt(QWidget):
         (umap_embeddings, used_embeddings) = future.result()
         self.viewer.window._qt_window.setEnabled(True)
         self.napari_update_umap(umap_embeddings, used_embeddings)
+        self.progressbar.setHidden(True)
+        self.progressbar.set_label_text("Recalculate umap")
 
     @staticmethod
     def index_to_rgba(index: int) -> list[int]:
@@ -641,6 +646,8 @@ class ClusteringWidgetQt(QWidget):
         # in a separate thread, but to change Qt elements, it must be run in the same thread as the main program.
         ppe = futures.ProcessPoolExecutor(max_workers=1)
         target_cluster = self._cluster_dropdown.currentData(Qt.UserRole)
-        f = ppe.submit(urefine.refine, clusters, embeddings, target_cluster)
+        umap_neighbors = self.get_umap_tool().get_umap_neighbors()
+        umap_metric = self.get_umap_tool().get_umap_metric()
+        f = ppe.submit(urefine.refine, clusters, embeddings, target_cluster, umap_neighbors, umap_metric)
         ppe.shutdown(wait=False)
         f.add_done_callback(self.refinement_done.emit)
