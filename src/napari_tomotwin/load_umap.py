@@ -108,10 +108,15 @@ class LoadUmapTool:
         #self.plotter_widget.manual_label_opacity = 0
         self.plotter_widget.plot_x_axis.setCurrentIndex(3)
         self.plotter_widget.plot_y_axis.setCurrentIndex(4)
-        self.plotter_widget.bin_auto.setChecked(self.umap.attrs["embeddings_attrs"]["mode"] != "COORDS")
+
         ptype=1
-        if self.umap.attrs["embeddings_attrs"]["mode"] == "COORDS":
-            ptype=0
+        try:
+            if self.umap.attrs["embeddings_attrs"]["mode"] == "COORDS":
+                ptype=0
+        except KeyError:
+            print("Old Embedding file detected. Assuming sliding window data.")
+            pass
+        self.plotter_widget.bin_auto.setChecked(ptype)
         self.plotter_widget.plotting_type.setCurrentIndex(ptype)
         self.plotter_widget.plot_hide_non_selected.setChecked(True)
         self.plotter_widget.setDisabled(True)
@@ -164,11 +169,18 @@ class LoadUmapTool:
         y = np.array(umap["Y"], dtype=int)
         x = np.array(umap["X"], dtype=int)
 
+        iscoords = False
+        try:
+            iscoords = umap.attrs["embeddings_attrs"]["mode"] == "COORDS"
+        except KeyError:
+            print("Old Embedding file detected. Assuming sliding window data.")
+            pass
+
         # values = np.array(range(1, len(x) + 1))
         for stride_x in mtqdm(list(range(-stride,stride))):
             for stride_y in range(-stride,stride):
                 for stride_z in range(-stride,stride):
-                    if umap.attrs["embeddings_attrs"]["mode"] == "COORDS":
+                    if iscoords:
                         if stride_x ** 2 + stride_y ** 2 + stride_z ** 2 > stride ** 2:
                             continue
                     index = (z + stride_z, y + stride_y, x + stride_x)
@@ -245,13 +257,16 @@ class LoadUmapTool:
         return True
 
     def get_umap_metric(self) -> str:
-        return self.umap.attrs["umap_metric"]
+        return self.umap.attrs.get("umap_metric","euclidean")
 
     def get_umap_mode(self) -> str:
         return self.umap.attrs["embeddings_attrs"]["mode"]
 
     def get_umap_neighbors(self) -> int:
-        return self.umap.attrs["umap_neighbors"]
+        try:
+            return self.umap.attrs["umap_neighbors"]
+        except KeyError:
+            return 200
 
     def load_umap(self, filename: pathlib.Path):
         self.update_progress_bar("Read umap")
