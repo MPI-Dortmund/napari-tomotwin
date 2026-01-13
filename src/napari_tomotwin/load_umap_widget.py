@@ -108,6 +108,7 @@ class UmapToolQt(QWidget):
             self.load_umap_tool = LoadUmapTool(
                 plotter_widget=self.plotter_widget
             )
+            self.cluster_widget.set_umap_tool(self.load_umap_tool)
             self.load_umap_tool.set_progressbar(self.progressBar)
 
             self.cluster_widget.set_plotter_widget(self.plotter_widget)
