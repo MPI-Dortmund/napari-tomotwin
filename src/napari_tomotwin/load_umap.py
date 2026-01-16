@@ -10,12 +10,28 @@ from magicgui.tqdm import tqdm as mtqdm
 from matplotlib.patches import Circle
 from napari.qt.threading import thread_worker
 from napari.utils import notifications
-from napari_clusters_plotter._plotter_utilities import estimate_number_bins
 from napari_tomotwin.anchor_tool import drag_circle_callback
 from qtpy.QtWidgets import (
     QFileDialog,
     QMessageBox,
 )
+
+
+def estimate_number_bins(data) -> int:
+    """
+    Estimates number of bins according Freedman–Diaconis rule.
+    
+    This function was previously from napari_clusters_plotter._plotter_utilities
+    but is now included locally for compatibility with napari-clusters-plotter 0.10+.
+    """
+    from scipy.stats import iqr as scipy_iqr
+
+    est_a = (np.max(data) - np.min(data)) / (
+        2 * scipy_iqr(data) / np.cbrt(len(data))
+    )
+    if np.isnan(est_a):
+        return 256
+    return int(est_a)
 
 
 class LoadUmapTool:
@@ -52,26 +68,8 @@ class LoadUmapTool:
         except AttributeError:
             print("Can't hide progress bar. Not initialized")
 
-    @thread_worker()
-    def run_clusters_plotter(
-        self,
-        plotter_widget,
-        features,
-        plot_x_axis_name,
-        plot_y_axis_name,
-        plot_cluster_name,
-        force_redraw,
-    ):
-        """
-        Wrapper function to run clusters plotter in a seperate thead.
-        """
-        plotter_widget.run(
-            features=features,
-            plot_x_axis_name=plot_x_axis_name,
-            plot_y_axis_name=plot_y_axis_name,
-            plot_cluster_name=plot_cluster_name,
-            force_redraw=force_redraw,
-        )
+    # Note: run_clusters_plotter was removed in napari-clusters-plotter 0.10+
+    # The plotter now uses plot_needs_update.emit() instead of run()
 
     def show_umap(self, label_layer):
 
@@ -97,52 +95,59 @@ class LoadUmapTool:
         self.created_layers.append(label_layer)
 
         try:
-            # napari-clusters-plotter > 0.7.4
+            # napari-clusters-plotter 0.10+
             label_layer.opacity = 0
             label_layer.visible = True
-            self.plotter_widget.layer_select.value = label_layer
-        except:
-            print("ERROR!!")
-            # napari-clusters-plotter < 0.7.4
+            # Select the layer via napari's layer selection mechanism
+            self.viewer.layers.selection.active = label_layer
+        except Exception as e:
+            print(f"ERROR: {e}")
             pass
-        #self.plotter_widget.manual_label_opacity = 0
-        self.plotter_widget.plot_x_axis.setCurrentIndex(3)
-        self.plotter_widget.plot_y_axis.setCurrentIndex(4)
 
-        ptype=1
+        # Determine plotting type based on embedding mode
+        # COORDS mode uses SCATTER (0), sliding window uses HISTOGRAM2D (1)
+        use_scatter = False
         try:
-            if self.umap.attrs["embeddings_attrs"]["mode"] == "COORDS":
-                ptype=0
+            mode = self.umap.attrs["embeddings_attrs"]["mode"]
+            print(f"DEBUG: embeddings_attrs mode = {mode}")
+            if mode == "COORDS":
+                use_scatter = True
         except KeyError:
             print("Old Embedding file detected. Assuming sliding window data.")
             pass
-        self.plotter_widget.bin_auto.setChecked(ptype)
-        self.plotter_widget.plotting_type.setCurrentIndex(ptype)
-        self.plotter_widget.plot_hide_non_selected.setChecked(True)
+        print(f"DEBUG: use_scatter = {use_scatter}")
+
+        # Set properties using the new 0.10 API
+        # Block plot_needs_update signal to prevent premature replotting
+        self.plotter_widget.plot_needs_update.disconnect(self.plotter_widget._replot)
+        
+        # Set plotting_type FIRST to ensure correct active_artist
+        plot_type = "SCATTER" if use_scatter else "HISTOGRAM2D"
+        print(f"DEBUG: Setting plot_type to {plot_type}")
+        self.plotter_widget.control_widget.plot_type_box.setCurrentText(plot_type)
+        self.plotter_widget._on_plot_type_changed()
+        print(f"DEBUG: After _on_plot_type_changed, active_artist type: {type(self.plotter_widget.plotting_widget.active_artist).__name__}")
+        print(f"DEBUG: plotting_type property: {self.plotter_widget.plotting_type}")
+        
+        # Now set axes (these would normally trigger replot, but we disconnected it)
+        self.plotter_widget.control_widget.x_axis_box.setCurrentText("umap_0")
+        self.plotter_widget.control_widget.y_axis_box.setCurrentText("umap_1")
+        self.plotter_widget.automatic_bins = not use_scatter
+        self.plotter_widget.hide_non_selected = True
+        
+        # Reconnect the signal
+        self.plotter_widget.plot_needs_update.connect(self.plotter_widget._replot)
         self.plotter_widget.setDisabled(True)
 
         try:
-            # Needs to run in a separate thread, otherwise it freezes when it is loading the umap
-            worker = self.run_clusters_plotter(
-                self.plotter_widget,
-                features=self.umap,
-                plot_x_axis_name="umap_0",
-                plot_y_axis_name="umap_1",
-                plot_cluster_name=None,
-                force_redraw=True,
-            )  # create "worker" object
-            worker.returned.connect(
-                lambda x: self.plotter_widget.setEnabled(True)
-            )
-            worker.finished.connect(self.hide_progress_bar)
-            worker.finished.connect(
-                lambda: napari.current_viewer().window._qt_window.setEnabled(
-                    True
-                )
-            )
-            worker.start()
+            # In napari-clusters-plotter 0.10+, just emit the update signal
+            self.plotter_widget.plot_needs_update.emit()
+            self.plotter_widget.setEnabled(True)
+            self.hide_progress_bar()
+            napari.current_viewer().window._qt_window.setEnabled(True)
 
-        except:
+        except Exception as e:
+            print(f"Error updating plot: {e}")
             notifications.show_error("Can't load umap")
             self.hide_progress_bar()
             napari.current_viewer().window._qt_window.setEnabled(True)

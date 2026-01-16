@@ -5,7 +5,7 @@ import os
 import os.path
 import tempfile
 from concurrent import futures
-from napari_clusters_plotter._plotter import PlotterWidget
+from napari_clusters_plotter import PlotterWidget
 from napari_tomotwin.load_umap import LoadUmapTool
 from napari.utils import notifications
 
@@ -87,13 +87,14 @@ class UmapToolQt(QWidget):
                 self.viewer.window.remove_dock_widget(self.plotter_Widget_dock)
                 self.viewer.window.remove_dock_widget(self.cluster_widget_dock)
                 for l in self.load_umap_tool.get_created_layers():
-                    self.plotter_widget.layer_select.changed.disconnect()  # otherwise I get an emit loop error
+                    # In napari-clusters-plotter 0.10+, layer selection is handled via napari's layer selection
+                    # No need to disconnect layer_select.changed as it no longer exists
                     self.viewer.layers.remove(l)
 
             self.plotter_Widget_dock, self.plotter_widget = (
                 self.viewer.window.add_plugin_dock_widget(
                     "napari-clusters-plotter",
-                    widget_name="Plotter Widget",
+                    widget_name="Plot & select features",
                     tabify=False,
                 )
             )

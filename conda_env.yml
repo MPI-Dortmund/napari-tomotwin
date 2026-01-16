@@ -22,4 +22,5 @@ dependencies:
   - pip
   - pip:
       - napari-boxmanager # Install napari-boxmanager via pip because otherwise scripts in setup.cfg are ignored
-      - napari-clusters-plotter==0.8.1
+      - napari-clusters-plotter>=0.10
+      - nap-plot-tools

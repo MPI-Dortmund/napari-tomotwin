@@ -14,11 +14,8 @@ from PyQt5.QtWidgets import (
 )
 from napari.qt.threading import thread_worker
 from napari.utils import notifications
-from napari_clusters_plotter._plotter import PlotterWidget
-from napari_clusters_plotter._utilities import (
-    get_layer_tabular_data,
-)
-from napari_clusters_plotter._utilities import get_nice_colormap
+from napari_clusters_plotter import PlotterWidget
+from nap_plot_tools.cmap import cat10_mod_cmap
 from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 from napari_tomotwin.load_umap import LoadUmapTool
 from qtpy.QtCore import Qt
@@ -43,6 +40,17 @@ from .make_targets import (
     _get_medoid_embedding,
 )
 from .target_manager import TargetManager, Target
+
+
+def _get_active_layer(plotter_widget):
+    """Helper to get the active layer from PlotterWidget.
+    
+    In napari-clusters-plotter 0.10+, layers is a list of selected layers.
+    Returns the first layer or None if no layers are selected.
+    """
+    if plotter_widget.layers and len(plotter_widget.layers) > 0:
+        return plotter_widget.layers[0]
+    return None
 
 
 class ColorItemDelegate(QStyledItemDelegate):
@@ -206,23 +214,12 @@ class ClusteringWidgetQt(QWidget):
         return True
 
     def replot_cluster_plotter(self):
-
-        clustering_ID = self.plotter_widget.plot_cluster_id.currentText()
-
-        features = get_layer_tabular_data(
-            self.plotter_widget.layer_select.value
-        )
-
-        # redraw the whole plot
+        # In napari-clusters-plotter 0.10+, just emit the update signal
+        # The widget handles axis settings via properties
         try:
-            self.plotter_widget.run(
-                features,
-                "umap_0",
-                "umap_1",
-                plot_cluster_name=clustering_ID,
-                force_redraw=True,
-            )
-
+            self.plotter_widget.x_axis = "umap_0"
+            self.plotter_widget.y_axis = "umap_1"
+            self.plotter_widget.plot_needs_update.emit()
         except AttributeError:
             # In this case, replotting is not yet possible
             pass
@@ -238,12 +235,13 @@ class ClusteringWidgetQt(QWidget):
             id = int(first_column_item.text())
 
             target = self.target_manger.get_target_by_id(id)
-            self.plotter_widget.layer_select.value = target.layer
+            # In napari-clusters-plotter 0.10+, select layer via napari's layer selection
+            self.viewer.layers.selection.active = target.layer
             clids = np.zeros(
                 shape=target.embeddings_mask.shape, dtype=np.int64
             )
             clids[target.embeddings_mask] = target.cluster_id
-            self.plotter_widget.layer_select.value.features[
+            target.layer.features[
                 "MANUAL_CLUSTER_ID"
             ] = clids
             self.replot_cluster_plotter()
@@ -251,9 +249,13 @@ class ClusteringWidgetQt(QWidget):
 
     def set_plotter_widget(self, plotter_widget: PlotterWidget):
         self.plotter_widget = plotter_widget
-        self.plotter_widget_run_func = self.plotter_widget.run
-        self.plotter_widget.graphics_widget.mpl_connect(
-            "draw_event", lambda _: self.after_draw_event()
+        # In napari-clusters-plotter 0.10+, use signals from biaplotter instead of mpl_connect
+        # Connect to artist_changed_signal and selector_changed_signal for UI updates
+        self.plotter_widget.plotting_widget.artist_changed_signal.connect(
+            lambda _: self.after_draw_event()
+        )
+        self.plotter_widget.plotting_widget.selector_changed_signal.connect(
+            lambda _: self.after_draw_event()
         )
 
     def delete_candidate(self):
@@ -286,11 +288,12 @@ class ClusteringWidgetQt(QWidget):
             # The target points layer should get deleted when clusters are reseted
             # Furthermore, the button to calculate the targest should get disabled
             no_clusters = True
-            if (
+            active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+            if active_layer is not None and (
                 "MANUAL_CLUSTER_ID"
-                in self.plotter_widget.layer_select.value.features
+                in active_layer.features
             ):
-                clusters = self.plotter_widget.layer_select.value.features[
+                clusters = active_layer.features[
                     "MANUAL_CLUSTER_ID"
                 ]
                 ucl = np.unique(clusters)
@@ -306,7 +309,8 @@ class ClusteringWidgetQt(QWidget):
                     self._recalc_umap.setEnabled(True)
                 self._add_candidate.setEnabled(True)
                 self._show_targets.setEnabled(True)
-            self.plotter_widget.layer_select.value.opacity = 0 # hot fix until line 108 in load_umap works (PR must be accepted)
+            if active_layer is not None:
+                active_layer.opacity = 0 # hot fix until line 108 in load_umap works (PR must be accepted)
 
         except Exception as e:
             print(e)
@@ -373,10 +377,13 @@ class ClusteringWidgetQt(QWidget):
             wsave.start()
 
     def _on_show_target_clicked(self):
-        emb_pth = self.plotter_widget.layer_select.value.metadata["tomotwin"][
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+        if active_layer is None:
+            return
+        emb_pth = active_layer.metadata["tomotwin"][
             "embeddings_path"
         ]
-        clusters = self.plotter_widget.layer_select.value.features[
+        clusters = active_layer.features[
             "MANUAL_CLUSTER_ID"
         ]
 
@@ -394,16 +401,13 @@ class ClusteringWidgetQt(QWidget):
     def show_targets_callback(self, future: futures.Future):
         points: pd.DataFrame = future.result()
         point_colors = []
-        colors = get_nice_colormap()
-        import PIL.ImageColor as ImageColor
 
         c = self._cluster_dropdown.currentData(Qt.UserRole)
 
-        rgba = [
-            float(v) / 255
-            for v in list(ImageColor.getcolor(colors[c % len(colors)], "RGB"))
-        ]
-        rgba.append(0.9)
+        # In napari-clusters-plotter 0.10+, use cat10_mod_cmap
+        # Get the color from the colormap for the given index
+        rgba = list(cat10_mod_cmap(c % 10))  # cat10 has 10 colors
+        rgba[3] = 0.9  # Set alpha
         point_colors.append(rgba)
 
         self.delete_points_layer()
@@ -457,16 +461,19 @@ class ClusteringWidgetQt(QWidget):
         self.tableWidget.itemChanged.connect(self._table_item_name_changed)
 
     def make_target(self, cluster_id):
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+        if active_layer is None:
+            return None
         embeddings_mask = (
-            self.plotter_widget.layer_select.value.features[
+            active_layer.features[
                 "MANUAL_CLUSTER_ID"
             ]
             == cluster_id
         )
-        embeddings_path = self.plotter_widget.layer_select.value.metadata[
+        embeddings_path = active_layer.metadata[
             "tomotwin"
         ]["embeddings_path"]
-        layer = self.plotter_widget.layer_select.value
+        layer = active_layer
         color = self.index_to_rgba(cluster_id)
         target = Target(
             embeddings_path, embeddings_mask, layer, cluster_id, color
@@ -474,6 +481,9 @@ class ClusteringWidgetQt(QWidget):
         return target
 
     def _on_add_candidate_clicked(self):
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+        if active_layer is None:
+            return
 
         c = self._cluster_dropdown.currentData(Qt.UserRole)
         target = self.make_target(c)
@@ -488,7 +498,7 @@ class ClusteringWidgetQt(QWidget):
         entry = [
             f"{target.target_id}",
             "",
-            self.plotter_widget.layer_select.value.name,
+            active_layer.name,
             target.target_name,
         ]
         for col, value in enumerate(entry):
@@ -533,26 +543,22 @@ class ClusteringWidgetQt(QWidget):
 
     @staticmethod
     def index_to_rgba(index: int) -> list[int]:
-        colors = get_nice_colormap()
-        import PIL.ImageColor as ImageColor
-
-        rgba = [
-            int(v)
-            for v in list(
-                ImageColor.getcolor(colors[index % len(colors)], "RGB")
-            )
-        ]
+        # In napari-clusters-plotter 0.10+, use cat10_mod_cmap
+        rgba_float = list(cat10_mod_cmap(index % 10))  # cat10 has 10 colors
+        rgba = [int(v * 255) for v in rgba_float[:3]]
         rgba.append(int(255 * 0.9))
         return rgba
 
     def update_all(self):
         cls = []
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
         if (
-            hasattr(self.plotter_widget.layer_select.value, "features")
+            active_layer is not None
+            and hasattr(active_layer, "features")
             and "MANUAL_CLUSTER_ID"
-            in self.plotter_widget.layer_select.value.features
+            in active_layer.features
         ):
-            cls = self.plotter_widget.layer_select.value.features[
+            cls = active_layer.features[
                 "MANUAL_CLUSTER_ID"
             ]
         self.update_items_cluster_dropdown(self._cluster_dropdown, cls)
@@ -588,9 +594,13 @@ class ClusteringWidgetQt(QWidget):
         return color_dropdown
 
     def reestimate_umap(self):
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+        if active_layer is None:
+            notifications.show_info(f"No layer selected. Can't refine.")
+            return
         try:
             print("Read clusters")
-            clusters = self.plotter_widget.layer_select.value.features[
+            clusters = active_layer.features[
                 "MANUAL_CLUSTER_ID"
             ]
             if not np.any(clusters > 0):
@@ -625,7 +635,7 @@ class ClusteringWidgetQt(QWidget):
 
         print("Read embeddings")
         emb_pth = get_embedding_path(
-            self.plotter_widget.layer_select.value.metadata["tomotwin"][
+            active_layer.metadata["tomotwin"][
                 "embeddings_path"
             ]
         )
@@ -634,7 +644,7 @@ class ClusteringWidgetQt(QWidget):
             print("No path selected.")
             return
 
-        self.plotter_widget.layer_select.value.metadata["tomotwin"][
+        active_layer.metadata["tomotwin"][
             "embeddings_path"
         ] = emb_pth
         embeddings = pd.read_pickle(emb_pth)
