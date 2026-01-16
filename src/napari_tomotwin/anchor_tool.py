@@ -43,7 +43,7 @@ def _draw_circle(
     circle = Circle(tuple(center), 0.5, fill=False, color=col)
     circles.append(circle)
     plotter_widget.plotting_widget.axes.add_patch(circle)
-    plotter_widget.plotting_widget.draw_idle()
+    plotter_widget.plotting_widget.canvas.draw_idle()
 
 
 def _get_active_layer(plotter_widget: PlotterWidget):

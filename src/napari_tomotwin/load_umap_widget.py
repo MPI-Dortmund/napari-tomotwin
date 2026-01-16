@@ -103,7 +103,7 @@ class UmapToolQt(QWidget):
 
             self.cluster_widget = ClusteringWidgetQt(self.viewer)
             self.cluster_widget_dock = self.viewer.window.add_dock_widget(
-                self.cluster_widget, area="right", name="UMAP Tools"
+                self.cluster_widget, area="left", name="UMAP Tools"
             )
 
             self.load_umap_tool = LoadUmapTool(
