@@ -257,6 +257,11 @@ class ClusteringWidgetQt(QWidget):
         self.plotter_widget.plotting_widget.selector_changed_signal.connect(
             lambda _: self.after_draw_event()
         )
+        # Connect to selection_applied_signal from all selectors to update UI after lasso/ellipse/rectangle selection
+        for selector in self.plotter_widget.plotting_widget.selectors.values():
+            selector.selection_applied_signal.connect(
+                lambda _: self.after_draw_event()
+            )
 
     def delete_candidate(self):
         if self.tableWidget.currentItem() is None:
@@ -304,17 +309,55 @@ class ClusteringWidgetQt(QWidget):
                 self._recalc_umap.setEnabled(False)
                 self._add_candidate.setEnabled(False)
                 self._show_targets.setEnabled(False)
+                if active_layer is not None:
+                    active_layer.opacity = 0  # Hide when no clusters
             else:
                 if self.nvidia_available:
                     self._recalc_umap.setEnabled(True)
                 self._add_candidate.setEnabled(True)
                 self._show_targets.setEnabled(True)
-            if active_layer is not None:
-                active_layer.opacity = 0 # hot fix until line 108 in load_umap works (PR must be accepted)
+                if active_layer is not None:
+                    active_layer.opacity = 1  # Show when clusters are selected
+                    # Make non-selected labels (MANUAL_CLUSTER_ID = 0) transparent
+                    self._update_label_colors_with_transparent_background(active_layer)
 
         except Exception as e:
             print(e)
             pass
+
+    def _update_label_colors_with_transparent_background(self, layer):
+        """Update the label colormap to make non-selected labels transparent."""
+        try:
+            from napari.utils import DirectLabelColormap
+            
+            features = layer.features
+            if "MANUAL_CLUSTER_ID" not in features.columns:
+                return
+            if "label" not in features.columns:
+                return
+                    
+            cluster_ids = features["MANUAL_CLUSTER_ID"].values
+            label_values = features["label"].values
+            
+            # Build color dict: transparent for MANUAL_CLUSTER_ID=0, colored for others
+            color_dict = {0: np.array([0, 0, 0, 0])}  # Background always transparent
+            
+            for label_val, cluster_id in zip(label_values, cluster_ids):
+                label_int = int(label_val)
+                if cluster_id == 0:
+                    # Non-selected: transparent
+                    color_dict[label_int] = np.array([0, 0, 0, 0])
+                else:
+                    # Selected: use cluster color
+                    rgba = self.index_to_rgba(int(cluster_id))
+                    color_dict[label_int] = np.array([c / 255.0 for c in rgba])
+            
+            layer.colormap = DirectLabelColormap(color_dict=color_dict)
+            layer.refresh()
+        except Exception as e:
+            print(f"Error updating label colors: {e}")
+            import traceback
+            traceback.print_exc()
 
     def cleanup(self):
         if self.tmp_dir_path is None:
