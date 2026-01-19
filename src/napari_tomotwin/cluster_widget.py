@@ -95,7 +95,8 @@ class ClusteringWidgetQt(QWidget):
         self.plotter_widget: PlotterWidget
         self._load_umap_tool = None
         self.tmp_dir_path: str = None
-        self.base_umap_path: str = None  # Store the original UMAP path
+        self.base_umap_features: pd.DataFrame = None  # Store the original UMAP features
+        self.base_umap_metadata: dict = None  # Store the original metadata
         self.pbar_label = QLabel("")
         self.progressbar = LabeledProgressBar(self.pbar_label)
         self.progressbar.setRange(0, 0)
@@ -596,32 +597,32 @@ class ClusteringWidgetQt(QWidget):
         self.progressbar.setHidden(True)
         self.progressbar.set_label_text("Remap")
         # Enable the Show Base UMAP button after remapping
-        if self.base_umap_path is not None:
+        if self.base_umap_features is not None:
             self._show_base_umap.setEnabled(True)
 
     def _on_show_base_umap_click(self):
-        """Load and display the original base UMAP."""
-        if self.base_umap_path is None or not os.path.exists(self.base_umap_path):
-            notifications.show_info("Base UMAP path not available.")
+        """Restore the original base UMAP display."""
+        if self.base_umap_features is None:
+            notifications.show_info("Base UMAP data not available.")
             return
         
-        self.viewer.window._qt_window.setEnabled(False)
-        self.progressbar.setHidden(False)
-        self.progressbar.set_label_text("Loading Base UMAP")
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+        if active_layer is None:
+            notifications.show_info("No layer selected.")
+            return
         
-        # Load the base UMAP
-        worker = self.get_umap_tool().start_umap_worker(self.base_umap_path)
-        worker.returned.connect(self._on_base_umap_loaded)
-        worker.start()
-    
-    def _on_base_umap_loaded(self, label_layer):
-        """Callback when base UMAP is loaded."""
-        self.progressbar.setHidden(True)
-        self.progressbar.set_label_text("Remap")
-        # Disable the button since we're back at base UMAP
+        # Restore the original features and metadata
+        active_layer.features = self.base_umap_features.copy()
+        active_layer.metadata["tomotwin"] = self.base_umap_metadata.copy()
+        
+        # Replot
+        self.replot_cluster_plotter()
+        self.update_all()
+        
+        # Disable the button and clear stored data
         self._show_base_umap.setEnabled(False)
-        # Clear the stored base path since we've returned to it
-        self.base_umap_path = None
+        self.base_umap_features = None
+        self.base_umap_metadata = None
 
     @staticmethod
     def index_to_rgba(index: int) -> list[int]:
@@ -683,12 +684,10 @@ class ClusteringWidgetQt(QWidget):
             notifications.show_info(f"No layer selected. Can't refine.")
             return
         
-        # Store the base UMAP path before remapping (only if not already stored)
-        if self.base_umap_path is None:
-            try:
-                self.base_umap_path = active_layer.metadata["tomotwin"]["umap_path"]
-            except KeyError:
-                pass
+        # Store the base UMAP features before remapping (only if not already stored)
+        if self.base_umap_features is None:
+            self.base_umap_features = active_layer.features.copy()
+            self.base_umap_metadata = active_layer.metadata["tomotwin"].copy()
         
         try:
             print("Read clusters")
