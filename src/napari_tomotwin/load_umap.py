@@ -104,13 +104,15 @@ class LoadUmapTool:
             print(f"ERROR: {e}")
             pass
 
-        # Determine plotting type based on embedding mode
-        # COORDS mode uses SCATTER (0), sliding window uses HISTOGRAM2D (1)
+        # Determine plotting type based on embedding mode and number of points
+        # COORDS mode uses SCATTER only if < 10000 points, otherwise HISTOGRAM2D
         use_scatter = False
         try:
             mode = self.umap.attrs["embeddings_attrs"]["mode"]
             print(f"DEBUG: embeddings_attrs mode = {mode}")
-            if mode == "COORDS":
+            num_points = len(self.umap)
+            print(f"DEBUG: number of points = {num_points}")
+            if mode == "COORDS" and num_points < 10000:
                 use_scatter = True
         except KeyError:
             print("Old Embedding file detected. Assuming sliding window data.")
