@@ -95,6 +95,7 @@ class ClusteringWidgetQt(QWidget):
         self.plotter_widget: PlotterWidget
         self._load_umap_tool = None
         self.tmp_dir_path: str = None
+        self.base_umap_path: str = None  # Store the original UMAP path
         self.pbar_label = QLabel("")
         self.progressbar = LabeledProgressBar(self.pbar_label)
         self.progressbar.setRange(0, 0)
@@ -116,7 +117,7 @@ class ClusteringWidgetQt(QWidget):
 
         ####
         recalc_layout = QHBoxLayout()
-        self._recalc_umap = QPushButton("Recalculate UMAP", self)
+        self._recalc_umap = QPushButton("Remap", self)
         self._recalc_umap.clicked.connect(self._on_refine_click)
         self._recalc_umap.setEnabled(False)
         self._recalc_umap.setToolTip(
@@ -147,6 +148,15 @@ class ClusteringWidgetQt(QWidget):
         recalc_layout.addWidget(self._add_candidate)
 
         self.layout().addRow("", recalc_layout)
+
+        # Show Base UMAP button
+        self._show_base_umap = QPushButton("Show Base UMAP", self)
+        self._show_base_umap.clicked.connect(self._on_show_base_umap_click)
+        self._show_base_umap.setEnabled(False)
+        self._show_base_umap.setToolTip(
+            "Return to the original base UMAP after remapping."
+        )
+        self.layout().addWidget(self._show_base_umap)
 
         ## Now q table widget
         candlabl = QLabel("Candidates:")
@@ -246,6 +256,8 @@ class ClusteringWidgetQt(QWidget):
             ] = clids
             self.replot_cluster_plotter()
             self.update_all()
+            # Update label colors to make non-selected points transparent
+            self._update_label_colors_with_transparent_background(target.layer)
 
     def set_plotter_widget(self, plotter_widget: PlotterWidget):
         self.plotter_widget = plotter_widget
@@ -582,7 +594,34 @@ class ClusteringWidgetQt(QWidget):
         self.viewer.window._qt_window.setEnabled(True)
         self.napari_update_umap(umap_embeddings, used_embeddings)
         self.progressbar.setHidden(True)
-        self.progressbar.set_label_text("Recalculate umap")
+        self.progressbar.set_label_text("Remap")
+        # Enable the Show Base UMAP button after remapping
+        if self.base_umap_path is not None:
+            self._show_base_umap.setEnabled(True)
+
+    def _on_show_base_umap_click(self):
+        """Load and display the original base UMAP."""
+        if self.base_umap_path is None or not os.path.exists(self.base_umap_path):
+            notifications.show_info("Base UMAP path not available.")
+            return
+        
+        self.viewer.window._qt_window.setEnabled(False)
+        self.progressbar.setHidden(False)
+        self.progressbar.set_label_text("Loading Base UMAP")
+        
+        # Load the base UMAP
+        worker = self.get_umap_tool().start_umap_worker(self.base_umap_path)
+        worker.returned.connect(self._on_base_umap_loaded)
+        worker.start()
+    
+    def _on_base_umap_loaded(self, label_layer):
+        """Callback when base UMAP is loaded."""
+        self.progressbar.setHidden(True)
+        self.progressbar.set_label_text("Remap")
+        # Disable the button since we're back at base UMAP
+        self._show_base_umap.setEnabled(False)
+        # Clear the stored base path since we've returned to it
+        self.base_umap_path = None
 
     @staticmethod
     def index_to_rgba(index: int) -> list[int]:
@@ -611,7 +650,9 @@ class ClusteringWidgetQt(QWidget):
     ):
 
         dropdown.clear()
-        for c in np.unique(cluster_ids):
+        # Convert to numeric to handle categorical dtype from napari-clusters-plotter
+        unique_ids = np.unique(pd.to_numeric(cluster_ids, errors='coerce'))
+        for c in unique_ids:
 
             if c <= 0:
                 continue
@@ -641,12 +682,22 @@ class ClusteringWidgetQt(QWidget):
         if active_layer is None:
             notifications.show_info(f"No layer selected. Can't refine.")
             return
+        
+        # Store the base UMAP path before remapping (only if not already stored)
+        if self.base_umap_path is None:
+            try:
+                self.base_umap_path = active_layer.metadata["tomotwin"]["umap_path"]
+            except KeyError:
+                pass
+        
         try:
             print("Read clusters")
             clusters = active_layer.features[
                 "MANUAL_CLUSTER_ID"
             ]
-            if not np.any(clusters > 0):
+            # Convert to numeric to handle categorical dtype from napari-clusters-plotter
+            clusters_numeric = pd.to_numeric(clusters, errors='coerce')
+            if not np.any(clusters_numeric > 0):
                 raise KeyError
         except KeyError:
             notifications.show_info(f"No cluster selected. Can't refine.")
@@ -693,7 +744,7 @@ class ClusteringWidgetQt(QWidget):
         embeddings = pd.read_pickle(emb_pth)
 
         self.progressbar.setHidden(False)
-        self.progressbar.set_label_text("Recalculate umap")
+        self.progressbar.set_label_text("Remap")
 
         # this workaround using signal is necessary, as "add_done_callback" starts the method
         # in a separate thread, but to change Qt elements, it must be run in the same thread as the main program.
