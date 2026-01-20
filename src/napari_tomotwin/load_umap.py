@@ -136,6 +136,7 @@ class LoadUmapTool:
         self.plotter_widget.control_widget.y_axis_box.setCurrentText("umap_1")
         self.plotter_widget.automatic_bins = not use_scatter
         self.plotter_widget.hide_non_selected = True
+        self.plotter_widget.control_widget.histogram_cmap_box.setCurrentText("magma")
         
         # Reconnect the signal
         self.plotter_widget.plot_needs_update.connect(self.plotter_widget._replot)
