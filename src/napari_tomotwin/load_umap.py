@@ -1,5 +1,6 @@
 import os
 import pathlib
+import warnings
 from functools import partial
 from typing import List
 
@@ -127,7 +128,9 @@ class LoadUmapTool:
         plot_type = "SCATTER" if use_scatter else "HISTOGRAM2D"
         print(f"DEBUG: Setting plot_type to {plot_type}")
         self.plotter_widget.control_widget.plot_type_box.setCurrentText(plot_type)
-        self.plotter_widget._on_plot_type_changed()
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Categorical colormap detected")
+            self.plotter_widget._on_plot_type_changed()
         print(f"DEBUG: After _on_plot_type_changed, active_artist type: {type(self.plotter_widget.plotting_widget.active_artist).__name__}")
         print(f"DEBUG: plotting_type property: {self.plotter_widget.plotting_type}")
         
@@ -144,7 +147,10 @@ class LoadUmapTool:
 
         try:
             # In napari-clusters-plotter 0.10+, just emit the update signal
-            self.plotter_widget.plot_needs_update.emit()
+            # Suppress biaplotter categorical colormap warning
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Categorical colormap detected")
+                self.plotter_widget.plot_needs_update.emit()
             self.plotter_widget.setEnabled(True)
             self.hide_progress_bar()
             napari.current_viewer().window._qt_window.setEnabled(True)

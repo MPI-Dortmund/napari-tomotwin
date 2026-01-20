@@ -98,6 +98,12 @@ class UmapToolQt(QWidget):
                     tabify=False,
                 )
             )
+            
+            # Workaround for napari-clusters-plotter 0.10 bug: contextMenuEvent references
+            # self.context_menu which doesn't exist. Create an empty menu to prevent AttributeError.
+            from qtpy.QtWidgets import QMenu
+            if not hasattr(self.plotter_widget, 'context_menu'):
+                self.plotter_widget.context_menu = QMenu(self.plotter_widget)
 
             from .cluster_widget import ClusteringWidgetQt
 
