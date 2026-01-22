@@ -271,10 +271,106 @@ class ClusteringWidgetQt(QWidget):
             lambda _: self.after_draw_event()
         )
         # Connect to selection_applied_signal from all selectors to update UI after lasso/ellipse/rectangle selection
+        # and auto-increment the class so next selection gets a different color (only when Ctrl is held)
         for selector in self.plotter_widget.plotting_widget.selectors.values():
             selector.selection_applied_signal.connect(
-                lambda _: self.after_draw_event()
+                lambda _: self._on_selection_applied()
             )
+        
+        # Connect to canvas button_press_event to reset features BEFORE selection starts (if Ctrl not held)
+        self.plotter_widget.plotting_widget.canvas.mpl_connect(
+            'button_press_event', self._on_canvas_button_press
+        )
+
+    def _on_canvas_button_press(self, event):
+        """Called when mouse button is pressed on canvas. Resets features if Ctrl is not held."""
+        from qtpy.QtCore import Qt
+        from qtpy.QtGui import QGuiApplication
+        import pandas as pd
+        
+        print(f"DEBUG _on_canvas_button_press: button={event.button}")
+        
+        # Only handle left mouse button (button 1)
+        if event.button != 1:
+            print("DEBUG _on_canvas_button_press: ignoring non-left button")
+            return
+        
+        modifiers = QGuiApplication.keyboardModifiers()
+        ctrl_held = modifiers == Qt.ControlModifier
+        print(f"DEBUG _on_canvas_button_press: ctrl_held={ctrl_held}")
+        
+        if not ctrl_held:
+            print("DEBUG _on_canvas_button_press: resetting all MANUAL_CLUSTER_ID to 0")
+            # No Ctrl: reset all previous selections before the new one is made
+            for layer in self.plotter_widget.layers:
+                if "MANUAL_CLUSTER_ID" in layer.features.columns:
+                    # Reset all cluster IDs to 0
+                    cluster_ids = layer.features["MANUAL_CLUSTER_ID"].to_numpy().copy()
+                    sum_before = pd.to_numeric(cluster_ids, errors='coerce').sum()
+                    non_zero_before = (pd.to_numeric(cluster_ids, errors='coerce') != 0).sum()
+                    print(f"DEBUG _on_canvas_button_press: BEFORE reset - sum={sum_before}, non_zero_count={non_zero_before}")
+                    cluster_ids[:] = 0
+                    layer.features["MANUAL_CLUSTER_ID"] = pd.Series(cluster_ids).astype("category")
+                    # Verify after reset
+                    cluster_ids_after = layer.features["MANUAL_CLUSTER_ID"].to_numpy()
+                    sum_after = pd.to_numeric(cluster_ids_after, errors='coerce').sum()
+                    non_zero_after = (pd.to_numeric(cluster_ids_after, errors='coerce') != 0).sum()
+                    print(f"DEBUG _on_canvas_button_press: AFTER reset - sum={sum_after}, non_zero_count={non_zero_after}")
+                    print(f"DEBUG _on_canvas_button_press: reset layer {layer.name}")
+            
+            # CRITICAL: Also reset the artist's color_indices to 0!
+            # The biaplotter selector reads color_indices from the artist (not layer.features)
+            # and ADDS the new selection to it. If we don't reset color_indices, the old
+            # selections accumulate even though layer.features was reset.
+            try:
+                active_artist = self.plotter_widget.plotting_widget.active_artist
+                if active_artist is not None and hasattr(active_artist, 'color_indices'):
+                    num_points = len(active_artist.color_indices) if active_artist.color_indices is not None else 0
+                    print(f"DEBUG _on_canvas_button_press: resetting artist color_indices (length={num_points})")
+                    if num_points > 0:
+                        active_artist.color_indices = np.zeros(num_points, dtype=int)
+                        print(f"DEBUG _on_canvas_button_press: artist color_indices reset to zeros")
+            except Exception as e:
+                print(f"DEBUG _on_canvas_button_press: error resetting artist color_indices: {e}")
+        else:
+            print("DEBUG _on_canvas_button_press: Ctrl held, keeping previous selections")
+
+    def _on_selection_applied(self):
+        """Called after a selection is applied. Updates UI and handles class value based on Ctrl key."""
+        from qtpy.QtCore import Qt
+        from qtpy.QtGui import QGuiApplication
+        import pandas as pd
+        
+        print("DEBUG _on_selection_applied: called")
+        
+        # Show cluster IDs after selection was applied
+        for layer in self.plotter_widget.layers:
+            if "MANUAL_CLUSTER_ID" in layer.features.columns:
+                cluster_ids = layer.features["MANUAL_CLUSTER_ID"].to_numpy()
+                sum_ids = pd.to_numeric(cluster_ids, errors='coerce').sum()
+                non_zero_count = (pd.to_numeric(cluster_ids, errors='coerce') != 0).sum()
+                print(f"DEBUG _on_selection_applied: layer {layer.name} - sum={sum_ids}, non_zero_count={non_zero_count}")
+        
+        # Check if Ctrl is held - if so, increment class for next selection (different color)
+        modifiers = QGuiApplication.keyboardModifiers()
+        current_class = self.plotter_widget.plotting_widget.class_spinbox.value
+        ctrl_held = modifiers == Qt.ControlModifier
+        
+        print(f"DEBUG _on_selection_applied: ctrl_held={ctrl_held}, current_class={current_class}")
+        
+        if ctrl_held:
+            # Ctrl held: increment class for next selection to get different color
+            new_class = current_class + 1
+            self.plotter_widget.plotting_widget.class_spinbox.value = new_class
+            print(f"DEBUG _on_selection_applied: Ctrl held, incremented class to {new_class}")
+        else:
+            # No Ctrl: reset class to number of candidates + 1 for next selection
+            num_candidates = self.tableWidget.rowCount()
+            new_class = num_candidates + 1
+            self.plotter_widget.plotting_widget.class_spinbox.value = new_class
+            print(f"DEBUG _on_selection_applied: No Ctrl, reset class to {new_class}")
+        
+        self.after_draw_event()
 
     def delete_candidate(self):
         if self.tableWidget.currentItem() is None:
@@ -570,6 +666,11 @@ class ClusteringWidgetQt(QWidget):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
             self.tableWidget.setItem(current_row_count, col, item)
+        
+        # Auto-increment the class spinbox to prepare for the next cluster selection
+        # This ensures the next cluster gets a different color
+        current_class = self.plotter_widget.plotting_widget.class_spinbox.value
+        self.plotter_widget.plotting_widget.class_spinbox.value = current_class + 1
 
     def napari_update_umap(self, umap_embeddings, used_embeddings):
 
