@@ -297,6 +297,9 @@ class ClusteringWidgetQt(QWidget):
         
         modifiers = QGuiApplication.keyboardModifiers()
         ctrl_held = modifiers == Qt.ControlModifier
+        # Store ctrl_held state for use in _on_selection_applied
+        # (by the time selection_applied_signal fires, user may have released Ctrl)
+        self._ctrl_held_at_selection_start = ctrl_held
         print(f"DEBUG _on_canvas_button_press: ctrl_held={ctrl_held}")
         
         if not ctrl_held:
@@ -334,11 +337,15 @@ class ClusteringWidgetQt(QWidget):
                 print(f"DEBUG _on_canvas_button_press: error resetting artist color_indices: {e}")
         else:
             print("DEBUG _on_canvas_button_press: Ctrl held, keeping previous selections")
+            # Ctrl held: increment class BEFORE the selection is made so the new selection
+            # gets a different color than the previous one
+            current_class = self.plotter_widget.plotting_widget.class_spinbox.value
+            new_class = current_class + 1
+            self.plotter_widget.plotting_widget.class_spinbox.value = new_class
+            print(f"DEBUG _on_canvas_button_press: Ctrl held, incremented class from {current_class} to {new_class}")
 
     def _on_selection_applied(self):
         """Called after a selection is applied. Updates UI and handles class value based on Ctrl key."""
-        from qtpy.QtCore import Qt
-        from qtpy.QtGui import QGuiApplication
         import pandas as pd
         
         print("DEBUG _on_selection_applied: called")
@@ -351,18 +358,17 @@ class ClusteringWidgetQt(QWidget):
                 non_zero_count = (pd.to_numeric(cluster_ids, errors='coerce') != 0).sum()
                 print(f"DEBUG _on_selection_applied: layer {layer.name} - sum={sum_ids}, non_zero_count={non_zero_count}")
         
-        # Check if Ctrl is held - if so, increment class for next selection (different color)
-        modifiers = QGuiApplication.keyboardModifiers()
+        # Use the ctrl_held state that was saved at button press time
+        # (by the time this signal fires, user may have released Ctrl already)
+        ctrl_held = getattr(self, '_ctrl_held_at_selection_start', False)
         current_class = self.plotter_widget.plotting_widget.class_spinbox.value
-        ctrl_held = modifiers == Qt.ControlModifier
         
         print(f"DEBUG _on_selection_applied: ctrl_held={ctrl_held}, current_class={current_class}")
         
         if ctrl_held:
-            # Ctrl held: increment class for next selection to get different color
-            new_class = current_class + 1
-            self.plotter_widget.plotting_widget.class_spinbox.value = new_class
-            print(f"DEBUG _on_selection_applied: Ctrl held, incremented class to {new_class}")
+            # Ctrl held: class was already incremented in _on_canvas_button_press BEFORE
+            # the selection was made, so don't increment again here
+            print(f"DEBUG _on_selection_applied: Ctrl held, class already incremented to {current_class}")
         else:
             # No Ctrl: reset class to number of candidates + 1 for next selection
             num_candidates = self.tableWidget.rowCount()
