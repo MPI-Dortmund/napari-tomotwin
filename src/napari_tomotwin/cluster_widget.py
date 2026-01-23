@@ -335,6 +335,10 @@ class ClusteringWidgetQt(QWidget):
                         print(f"DEBUG _on_canvas_button_press: artist color_indices reset to zeros")
             except Exception as e:
                 print(f"DEBUG _on_canvas_button_press: error resetting artist color_indices: {e}")
+            
+            # Update the tomogram highlight immediately after reset
+            # This ensures that a single click (without dragging) clears the highlight
+            self.after_draw_event()
         else:
             print("DEBUG _on_canvas_button_press: Ctrl held, keeping previous selections")
             # Ctrl held: increment class BEFORE the selection is made so the new selection
