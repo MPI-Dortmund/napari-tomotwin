@@ -339,6 +339,12 @@ class ClusteringWidgetQt(QWidget):
             # Update the tomogram highlight immediately after reset
             # This ensures that a single click (without dragging) clears the highlight
             self.after_draw_event()
+            
+            # Reset class to number of candidates + 1 for the new selection
+            num_candidates = self.tableWidget.rowCount()
+            new_class = num_candidates + 1
+            self.plotter_widget.plotting_widget.class_spinbox.value = new_class
+            print(f"DEBUG _on_canvas_button_press: reset class to {new_class} (candidates={num_candidates})")
         else:
             print("DEBUG _on_canvas_button_press: Ctrl held, keeping previous selections")
             # Ctrl held: increment class BEFORE the selection is made so the new selection
