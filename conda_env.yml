@@ -8,7 +8,7 @@ dependencies:
   - python=3.10
   - napari[version='>=0.4.19']
   - pandas
-  - numpy
+  - numpy>=1.24
   - pyqt
   - matplotlib
   - scipy
@@ -16,6 +16,8 @@ dependencies:
   - tqdm
   - mrcfile
   - cuml=23.12
+  - cupy
+  - rapids-dask-dependency=23.12
   - cuda-version=11.8
   - git
   - hdbscan
