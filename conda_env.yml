@@ -23,6 +23,6 @@ dependencies:
   - hdbscan
   - pip
   - pip:
-      - napari-boxmanager==0.4.15b1 # Install napari-boxmanager via pip because otherwise scripts in setup.cfg are ignored
+      - napari-boxmanager==0.4.15b2 # Install napari-boxmanager via pip because otherwise scripts in setup.cfg are ignored
       - napari-clusters-plotter>=0.10
       - nap-plot-tools
