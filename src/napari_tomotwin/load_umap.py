@@ -1,5 +1,6 @@
 import os
 import pathlib
+import warnings
 from functools import partial
 from typing import List
 
@@ -10,12 +11,28 @@ from magicgui.tqdm import tqdm as mtqdm
 from matplotlib.patches import Circle
 from napari.qt.threading import thread_worker
 from napari.utils import notifications
-from napari_clusters_plotter._plotter_utilities import estimate_number_bins
 from napari_tomotwin.anchor_tool import drag_circle_callback
 from qtpy.QtWidgets import (
     QFileDialog,
     QMessageBox,
 )
+
+
+def estimate_number_bins(data) -> int:
+    """
+    Estimates number of bins according Freedman–Diaconis rule.
+    
+    This function was previously from napari_clusters_plotter._plotter_utilities
+    but is now included locally for compatibility with napari-clusters-plotter 0.10+.
+    """
+    from scipy.stats import iqr as scipy_iqr
+
+    est_a = (np.max(data) - np.min(data)) / (
+        2 * scipy_iqr(data) / np.cbrt(len(data))
+    )
+    if np.isnan(est_a):
+        return 256
+    return int(est_a)
 
 
 class LoadUmapTool:
@@ -52,26 +69,8 @@ class LoadUmapTool:
         except AttributeError:
             print("Can't hide progress bar. Not initialized")
 
-    @thread_worker()
-    def run_clusters_plotter(
-        self,
-        plotter_widget,
-        features,
-        plot_x_axis_name,
-        plot_y_axis_name,
-        plot_cluster_name,
-        force_redraw,
-    ):
-        """
-        Wrapper function to run clusters plotter in a seperate thead.
-        """
-        plotter_widget.run(
-            features=features,
-            plot_x_axis_name=plot_x_axis_name,
-            plot_y_axis_name=plot_y_axis_name,
-            plot_cluster_name=plot_cluster_name,
-            force_redraw=force_redraw,
-        )
+    # Note: run_clusters_plotter was removed in napari-clusters-plotter 0.10+
+    # The plotter now uses plot_needs_update.emit() instead of run()
 
     def show_umap(self, label_layer):
 
@@ -97,44 +96,67 @@ class LoadUmapTool:
         self.created_layers.append(label_layer)
 
         try:
-            # napari-clusters-plotter > 0.7.4
+            # napari-clusters-plotter 0.10+
             label_layer.opacity = 0
             label_layer.visible = True
-            self.plotter_widget.layer_select.value = label_layer
-        except:
-            print("ERROR!!")
-            # napari-clusters-plotter < 0.7.4
+            # Select the layer via napari's layer selection mechanism
+            self.viewer.layers.selection.active = label_layer
+        except Exception as e:
+            print(f"ERROR: {e}")
             pass
-        #self.plotter_widget.manual_label_opacity = 0
-        self.plotter_widget.plot_x_axis.setCurrentIndex(3)
-        self.plotter_widget.plot_y_axis.setCurrentIndex(4)
-        self.plotter_widget.bin_auto.setChecked(True)
-        self.plotter_widget.plotting_type.setCurrentIndex(1)
-        self.plotter_widget.plot_hide_non_selected.setChecked(True)
+
+        # Determine plotting type based on embedding mode and number of points
+        # COORDS mode uses SCATTER only if < 10000 points, otherwise HISTOGRAM2D
+        use_scatter = False
+        try:
+            mode = self.umap.attrs["embeddings_attrs"]["mode"]
+            print(f"DEBUG: embeddings_attrs mode = {mode}")
+            num_points = len(self.umap)
+            print(f"DEBUG: number of points = {num_points}")
+            if mode == "COORDS" and num_points < 10000:
+                use_scatter = True
+        except KeyError:
+            print("Old Embedding file detected. Assuming sliding window data.")
+            pass
+        print(f"DEBUG: use_scatter = {use_scatter}")
+
+        # Set properties using the new 0.10 API
+        # Block plot_needs_update signal to prevent premature replotting
+        self.plotter_widget.plot_needs_update.disconnect(self.plotter_widget._replot)
+        
+        # Set plotting_type FIRST to ensure correct active_artist
+        plot_type = "SCATTER" if use_scatter else "HISTOGRAM2D"
+        print(f"DEBUG: Setting plot_type to {plot_type}")
+        self.plotter_widget.control_widget.plot_type_box.setCurrentText(plot_type)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="Categorical colormap detected")
+            self.plotter_widget._on_plot_type_changed()
+        print(f"DEBUG: After _on_plot_type_changed, active_artist type: {type(self.plotter_widget.plotting_widget.active_artist).__name__}")
+        print(f"DEBUG: plotting_type property: {self.plotter_widget.plotting_type}")
+        
+        # Now set axes (these would normally trigger replot, but we disconnected it)
+        self.plotter_widget.control_widget.x_axis_box.setCurrentText("umap_0")
+        self.plotter_widget.control_widget.y_axis_box.setCurrentText("umap_1")
+        self.plotter_widget.automatic_bins = not use_scatter
+        self.plotter_widget.hide_non_selected = True
+        self.plotter_widget.control_widget.histogram_cmap_box.setCurrentText("magma")
+        
+        # Reconnect the signal
+        self.plotter_widget.plot_needs_update.connect(self.plotter_widget._replot)
         self.plotter_widget.setDisabled(True)
 
         try:
-            # Needs to run in a separate thread, otherwise it freezes when it is loading the umap
-            worker = self.run_clusters_plotter(
-                self.plotter_widget,
-                features=self.umap,
-                plot_x_axis_name="umap_0",
-                plot_y_axis_name="umap_1",
-                plot_cluster_name=None,
-                force_redraw=True,
-            )  # create "worker" object
-            worker.returned.connect(
-                lambda x: self.plotter_widget.setEnabled(True)
-            )
-            worker.finished.connect(self.hide_progress_bar)
-            worker.finished.connect(
-                lambda: napari.current_viewer().window._qt_window.setEnabled(
-                    True
-                )
-            )
-            worker.start()
+            # In napari-clusters-plotter 0.10+, just emit the update signal
+            # Suppress biaplotter categorical colormap warning
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message="Categorical colormap detected")
+                self.plotter_widget.plot_needs_update.emit()
+            self.plotter_widget.setEnabled(True)
+            self.hide_progress_bar()
+            napari.current_viewer().window._qt_window.setEnabled(True)
 
-        except:
+        except Exception as e:
+            print(f"Error updating plot: {e}")
             notifications.show_error("Can't load umap")
             self.hide_progress_bar()
             napari.current_viewer().window._qt_window.setEnabled(True)
@@ -153,16 +175,28 @@ class LoadUmapTool:
         Z = umap.attrs["embeddings_attrs"]["tomogram_input_shape"][0]
         Y = umap.attrs["embeddings_attrs"]["tomogram_input_shape"][1]
         X = umap.attrs["embeddings_attrs"]["tomogram_input_shape"][2]
-        stride = umap.attrs["embeddings_attrs"]["stride"][0]
+
+        stride = umap.attrs["embeddings_attrs"]["stride"]
+        stride = stride[0] if stride is not None else 10 # in this case coords were embedded
         segmentation_array = np.zeros(shape=(Z, Y, X), dtype=np.float32)
         z = np.array(umap["Z"], dtype=int)
         y = np.array(umap["Y"], dtype=int)
         x = np.array(umap["X"], dtype=int)
 
+        iscoords = False
+        try:
+            iscoords = umap.attrs["embeddings_attrs"]["mode"] == "COORDS"
+        except KeyError:
+            print("Old Embedding file detected. Assuming sliding window data.")
+            pass
+
         # values = np.array(range(1, len(x) + 1))
-        for stride_x in mtqdm(list(range(stride))):
-            for stride_y in range(stride):
-                for stride_z in range(stride):
+        for stride_x in mtqdm(list(range(-stride,stride))):
+            for stride_y in range(-stride,stride):
+                for stride_z in range(-stride,stride):
+                    if iscoords:
+                        if stride_x ** 2 + stride_y ** 2 + stride_z ** 2 > stride ** 2:
+                            continue
                     index = (z + stride_z, y + stride_y, x + stride_x)
                     segmentation_array[index] = values
 
@@ -179,6 +213,8 @@ class LoadUmapTool:
                 estimate_number_bins(self.umap["umap_1"]),
             ]
         )
+        print(f"Number of bins: {nbins}")
+
         h, xedges, yedges = np.histogram2d(
             self.umap["umap_0"], self.umap["umap_1"], bins=nbins
         )
@@ -233,6 +269,18 @@ class LoadUmapTool:
         )
 
         return True
+
+    def get_umap_metric(self) -> str:
+        return self.umap.attrs.get("umap_metric","euclidean")
+
+    def get_umap_mode(self) -> str:
+        return self.umap.attrs["embeddings_attrs"]["mode"]
+
+    def get_umap_neighbors(self) -> int:
+        try:
+            return self.umap.attrs["umap_neighbors"]
+        except KeyError:
+            return 200
 
     def load_umap(self, filename: pathlib.Path):
         self.update_progress_bar("Read umap")

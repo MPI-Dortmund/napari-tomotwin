@@ -5,7 +5,7 @@ import os
 import os.path
 import tempfile
 from concurrent import futures
-from napari_clusters_plotter._plotter import PlotterWidget
+from napari_clusters_plotter import PlotterWidget
 from napari_tomotwin.load_umap import LoadUmapTool
 from napari.utils import notifications
 
@@ -87,27 +87,35 @@ class UmapToolQt(QWidget):
                 self.viewer.window.remove_dock_widget(self.plotter_Widget_dock)
                 self.viewer.window.remove_dock_widget(self.cluster_widget_dock)
                 for l in self.load_umap_tool.get_created_layers():
-                    self.plotter_widget.layer_select.changed.disconnect()  # otherwise I get an emit loop error
+                    # In napari-clusters-plotter 0.10+, layer selection is handled via napari's layer selection
+                    # No need to disconnect layer_select.changed as it no longer exists
                     self.viewer.layers.remove(l)
 
             self.plotter_Widget_dock, self.plotter_widget = (
                 self.viewer.window.add_plugin_dock_widget(
                     "napari-clusters-plotter",
-                    widget_name="Plotter Widget",
+                    widget_name="Plot & select features",
                     tabify=False,
                 )
             )
+            
+            # Workaround for napari-clusters-plotter 0.10 bug: contextMenuEvent references
+            # self.context_menu which doesn't exist. Create an empty menu to prevent AttributeError.
+            from qtpy.QtWidgets import QMenu
+            if not hasattr(self.plotter_widget, 'context_menu'):
+                self.plotter_widget.context_menu = QMenu(self.plotter_widget)
 
             from .cluster_widget import ClusteringWidgetQt
 
             self.cluster_widget = ClusteringWidgetQt(self.viewer)
             self.cluster_widget_dock = self.viewer.window.add_dock_widget(
-                self.cluster_widget, area="right", name="UMAP Tools"
+                self.cluster_widget, area="left", name="UMAP Tools"
             )
 
             self.load_umap_tool = LoadUmapTool(
                 plotter_widget=self.plotter_widget
             )
+            self.cluster_widget.set_umap_tool(self.load_umap_tool)
             self.load_umap_tool.set_progressbar(self.progressBar)
 
             self.cluster_widget.set_plotter_widget(self.plotter_widget)

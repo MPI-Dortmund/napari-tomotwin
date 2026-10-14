@@ -56,7 +56,7 @@ def calculate_umap(
 
 
 def refine(
-    clusters, embeddings: pd.DataFrame, target_cluster: int = None
+    clusters, embeddings: pd.DataFrame, target_cluster: int = None, umap_neighbors: int = 200, umap_metric: str = "euclidean"
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     embeddings = embeddings.drop(columns=["level_0", "index"], errors="ignore")
     if target_cluster is None:
@@ -65,7 +65,7 @@ def refine(
         clmask = (clusters == target_cluster).to_numpy().squeeze()
 
     input_embeddings = embeddings.iloc[clmask, :]
-    umap_embedding_np, _ = calculate_umap(input_embeddings)
+    umap_embedding_np, _ = calculate_umap(input_embeddings, neighbors=umap_neighbors, metric=umap_metric)
 
     df_embeddings = pd.DataFrame(umap_embedding_np)
     df_embeddings.reset_index(drop=True, inplace=True)

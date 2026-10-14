@@ -14,11 +14,8 @@ from PyQt5.QtWidgets import (
 )
 from napari.qt.threading import thread_worker
 from napari.utils import notifications
-from napari_clusters_plotter._plotter import PlotterWidget
-from napari_clusters_plotter._utilities import (
-    get_layer_tabular_data,
-)
-from napari_clusters_plotter._utilities import get_nice_colormap
+from napari_clusters_plotter import PlotterWidget
+from nap_plot_tools.cmap import cat10_mod_cmap
 from napari_tomotwin._qt.labeled_progress_bar import LabeledProgressBar
 from napari_tomotwin.load_umap import LoadUmapTool
 from qtpy.QtCore import Qt
@@ -43,6 +40,17 @@ from .make_targets import (
     _get_medoid_embedding,
 )
 from .target_manager import TargetManager, Target
+
+
+def _get_active_layer(plotter_widget):
+    """Helper to get the active layer from PlotterWidget.
+    
+    In napari-clusters-plotter 0.10+, layers is a list of selected layers.
+    Returns the first layer or None if no layers are selected.
+    """
+    if plotter_widget.layers and len(plotter_widget.layers) > 0:
+        return plotter_widget.layers[0]
+    return None
 
 
 class ColorItemDelegate(QStyledItemDelegate):
@@ -87,6 +95,8 @@ class ClusteringWidgetQt(QWidget):
         self.plotter_widget: PlotterWidget
         self._load_umap_tool = None
         self.tmp_dir_path: str = None
+        self.base_umap_features: pd.DataFrame = None  # Store the original UMAP features
+        self.base_umap_metadata: dict = None  # Store the original metadata
         self.pbar_label = QLabel("")
         self.progressbar = LabeledProgressBar(self.pbar_label)
         self.progressbar.setRange(0, 0)
@@ -108,7 +118,7 @@ class ClusteringWidgetQt(QWidget):
 
         ####
         recalc_layout = QHBoxLayout()
-        self._recalc_umap = QPushButton("Recalculate UMAP", self)
+        self._recalc_umap = QPushButton("Remap", self)
         self._recalc_umap.clicked.connect(self._on_refine_click)
         self._recalc_umap.setEnabled(False)
         self._recalc_umap.setToolTip(
@@ -139,6 +149,15 @@ class ClusteringWidgetQt(QWidget):
         recalc_layout.addWidget(self._add_candidate)
 
         self.layout().addRow("", recalc_layout)
+
+        # Show Base UMAP button
+        self._show_base_umap = QPushButton("Show Base UMAP", self)
+        self._show_base_umap.clicked.connect(self._on_show_base_umap_click)
+        self._show_base_umap.setEnabled(False)
+        self._show_base_umap.setToolTip(
+            "Return to the original base UMAP after remapping."
+        )
+        self.layout().addWidget(self._show_base_umap)
 
         ## Now q table widget
         candlabl = QLabel("Candidates:")
@@ -177,6 +196,9 @@ class ClusteringWidgetQt(QWidget):
         layout.addRow("", pbar_layout)
         self.setMinimumHeight(300)
 
+    def set_umap_tool(self, tool: LoadUmapTool):
+        self._load_umap_tool = tool
+
     def get_umap_tool(self) -> LoadUmapTool:
         if self._load_umap_tool is None:
             self._load_umap_tool = LoadUmapTool(self.plotter_widget)
@@ -203,23 +225,12 @@ class ClusteringWidgetQt(QWidget):
         return True
 
     def replot_cluster_plotter(self):
-
-        clustering_ID = self.plotter_widget.plot_cluster_id.currentText()
-
-        features = get_layer_tabular_data(
-            self.plotter_widget.layer_select.value
-        )
-
-        # redraw the whole plot
+        # In napari-clusters-plotter 0.10+, just emit the update signal
+        # The widget handles axis settings via properties
         try:
-            self.plotter_widget.run(
-                features,
-                "umap_0",
-                "umap_1",
-                plot_cluster_name=clustering_ID,
-                force_redraw=True,
-            )
-
+            self.plotter_widget.x_axis = "umap_0"
+            self.plotter_widget.y_axis = "umap_1"
+            self.plotter_widget.plot_needs_update.emit()
         except AttributeError:
             # In this case, replotting is not yet possible
             pass
@@ -235,23 +246,147 @@ class ClusteringWidgetQt(QWidget):
             id = int(first_column_item.text())
 
             target = self.target_manger.get_target_by_id(id)
-            self.plotter_widget.layer_select.value = target.layer
+            # In napari-clusters-plotter 0.10+, select layer via napari's layer selection
+            self.viewer.layers.selection.active = target.layer
             clids = np.zeros(
                 shape=target.embeddings_mask.shape, dtype=np.int64
             )
             clids[target.embeddings_mask] = target.cluster_id
-            self.plotter_widget.layer_select.value.features[
+            target.layer.features[
                 "MANUAL_CLUSTER_ID"
             ] = clids
             self.replot_cluster_plotter()
             self.update_all()
+            # Update label colors to make non-selected points transparent
+            self._update_label_colors_with_transparent_background(target.layer)
 
     def set_plotter_widget(self, plotter_widget: PlotterWidget):
         self.plotter_widget = plotter_widget
-        self.plotter_widget_run_func = self.plotter_widget.run
-        self.plotter_widget.graphics_widget.mpl_connect(
-            "draw_event", lambda _: self.after_draw_event()
+        # In napari-clusters-plotter 0.10+, use signals from biaplotter instead of mpl_connect
+        # Connect to artist_changed_signal and selector_changed_signal for UI updates
+        self.plotter_widget.plotting_widget.artist_changed_signal.connect(
+            lambda _: self.after_draw_event()
         )
+        self.plotter_widget.plotting_widget.selector_changed_signal.connect(
+            lambda _: self.after_draw_event()
+        )
+        # Connect to selection_applied_signal from all selectors to update UI after lasso/ellipse/rectangle selection
+        # and auto-increment the class so next selection gets a different color (only when Ctrl is held)
+        for selector in self.plotter_widget.plotting_widget.selectors.values():
+            selector.selection_applied_signal.connect(
+                lambda _: self._on_selection_applied()
+            )
+        
+        # Connect to canvas button_press_event to reset features BEFORE selection starts (if Ctrl not held)
+        self.plotter_widget.plotting_widget.canvas.mpl_connect(
+            'button_press_event', self._on_canvas_button_press
+        )
+
+    def _on_canvas_button_press(self, event):
+        """Called when mouse button is pressed on canvas. Resets features if Ctrl is not held."""
+        from qtpy.QtCore import Qt
+        from qtpy.QtGui import QGuiApplication
+        import pandas as pd
+        
+        print(f"DEBUG _on_canvas_button_press: button={event.button}")
+        
+        # Only handle left mouse button (button 1)
+        if event.button != 1:
+            print("DEBUG _on_canvas_button_press: ignoring non-left button")
+            return
+        
+        modifiers = QGuiApplication.keyboardModifiers()
+        ctrl_held = modifiers == Qt.ControlModifier
+        # Store ctrl_held state for use in _on_selection_applied
+        # (by the time selection_applied_signal fires, user may have released Ctrl)
+        self._ctrl_held_at_selection_start = ctrl_held
+        print(f"DEBUG _on_canvas_button_press: ctrl_held={ctrl_held}")
+        
+        if not ctrl_held:
+            print("DEBUG _on_canvas_button_press: resetting all MANUAL_CLUSTER_ID to 0")
+            # No Ctrl: reset all previous selections before the new one is made
+            for layer in self.plotter_widget.layers:
+                if "MANUAL_CLUSTER_ID" in layer.features.columns:
+                    # Reset all cluster IDs to 0
+                    cluster_ids = layer.features["MANUAL_CLUSTER_ID"].to_numpy().copy()
+                    sum_before = pd.to_numeric(cluster_ids, errors='coerce').sum()
+                    non_zero_before = (pd.to_numeric(cluster_ids, errors='coerce') != 0).sum()
+                    print(f"DEBUG _on_canvas_button_press: BEFORE reset - sum={sum_before}, non_zero_count={non_zero_before}")
+                    cluster_ids[:] = 0
+                    layer.features["MANUAL_CLUSTER_ID"] = pd.Series(cluster_ids).astype("category")
+                    # Verify after reset
+                    cluster_ids_after = layer.features["MANUAL_CLUSTER_ID"].to_numpy()
+                    sum_after = pd.to_numeric(cluster_ids_after, errors='coerce').sum()
+                    non_zero_after = (pd.to_numeric(cluster_ids_after, errors='coerce') != 0).sum()
+                    print(f"DEBUG _on_canvas_button_press: AFTER reset - sum={sum_after}, non_zero_count={non_zero_after}")
+                    print(f"DEBUG _on_canvas_button_press: reset layer {layer.name}")
+            
+            # CRITICAL: Also reset the artist's color_indices to 0!
+            # The biaplotter selector reads color_indices from the artist (not layer.features)
+            # and ADDS the new selection to it. If we don't reset color_indices, the old
+            # selections accumulate even though layer.features was reset.
+            try:
+                active_artist = self.plotter_widget.plotting_widget.active_artist
+                if active_artist is not None and hasattr(active_artist, 'color_indices'):
+                    num_points = len(active_artist.color_indices) if active_artist.color_indices is not None else 0
+                    print(f"DEBUG _on_canvas_button_press: resetting artist color_indices (length={num_points})")
+                    if num_points > 0:
+                        active_artist.color_indices = np.zeros(num_points, dtype=int)
+                        print(f"DEBUG _on_canvas_button_press: artist color_indices reset to zeros")
+            except Exception as e:
+                print(f"DEBUG _on_canvas_button_press: error resetting artist color_indices: {e}")
+            
+            # Update the tomogram highlight immediately after reset
+            # This ensures that a single click (without dragging) clears the highlight
+            self.after_draw_event()
+            
+            # Reset class to number of candidates + 1 for the new selection
+            num_candidates = self.tableWidget.rowCount()
+            new_class = num_candidates + 1
+            self.plotter_widget.plotting_widget.class_spinbox.value = new_class
+            print(f"DEBUG _on_canvas_button_press: reset class to {new_class} (candidates={num_candidates})")
+        else:
+            print("DEBUG _on_canvas_button_press: Ctrl held, keeping previous selections")
+            # Ctrl held: increment class BEFORE the selection is made so the new selection
+            # gets a different color than the previous one
+            current_class = self.plotter_widget.plotting_widget.class_spinbox.value
+            new_class = current_class + 1
+            self.plotter_widget.plotting_widget.class_spinbox.value = new_class
+            print(f"DEBUG _on_canvas_button_press: Ctrl held, incremented class from {current_class} to {new_class}")
+
+    def _on_selection_applied(self):
+        """Called after a selection is applied. Updates UI and handles class value based on Ctrl key."""
+        import pandas as pd
+        
+        print("DEBUG _on_selection_applied: called")
+        
+        # Show cluster IDs after selection was applied
+        for layer in self.plotter_widget.layers:
+            if "MANUAL_CLUSTER_ID" in layer.features.columns:
+                cluster_ids = layer.features["MANUAL_CLUSTER_ID"].to_numpy()
+                sum_ids = pd.to_numeric(cluster_ids, errors='coerce').sum()
+                non_zero_count = (pd.to_numeric(cluster_ids, errors='coerce') != 0).sum()
+                print(f"DEBUG _on_selection_applied: layer {layer.name} - sum={sum_ids}, non_zero_count={non_zero_count}")
+        
+        # Use the ctrl_held state that was saved at button press time
+        # (by the time this signal fires, user may have released Ctrl already)
+        ctrl_held = getattr(self, '_ctrl_held_at_selection_start', False)
+        current_class = self.plotter_widget.plotting_widget.class_spinbox.value
+        
+        print(f"DEBUG _on_selection_applied: ctrl_held={ctrl_held}, current_class={current_class}")
+        
+        if ctrl_held:
+            # Ctrl held: class was already incremented in _on_canvas_button_press BEFORE
+            # the selection was made, so don't increment again here
+            print(f"DEBUG _on_selection_applied: Ctrl held, class already incremented to {current_class}")
+        else:
+            # No Ctrl: reset class to number of candidates + 1 for next selection
+            num_candidates = self.tableWidget.rowCount()
+            new_class = num_candidates + 1
+            self.plotter_widget.plotting_widget.class_spinbox.value = new_class
+            print(f"DEBUG _on_selection_applied: No Ctrl, reset class to {new_class}")
+        
+        self.after_draw_event()
 
     def delete_candidate(self):
         if self.tableWidget.currentItem() is None:
@@ -283,11 +418,12 @@ class ClusteringWidgetQt(QWidget):
             # The target points layer should get deleted when clusters are reseted
             # Furthermore, the button to calculate the targest should get disabled
             no_clusters = True
-            if (
+            active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+            if active_layer is not None and (
                 "MANUAL_CLUSTER_ID"
-                in self.plotter_widget.layer_select.value.features
+                in active_layer.features
             ):
-                clusters = self.plotter_widget.layer_select.value.features[
+                clusters = active_layer.features[
                     "MANUAL_CLUSTER_ID"
                 ]
                 ucl = np.unique(clusters)
@@ -298,16 +434,55 @@ class ClusteringWidgetQt(QWidget):
                 self._recalc_umap.setEnabled(False)
                 self._add_candidate.setEnabled(False)
                 self._show_targets.setEnabled(False)
+                if active_layer is not None:
+                    active_layer.opacity = 0  # Hide when no clusters
             else:
                 if self.nvidia_available:
                     self._recalc_umap.setEnabled(True)
                 self._add_candidate.setEnabled(True)
                 self._show_targets.setEnabled(True)
-            self.plotter_widget.layer_select.value.opacity = 0 # hot fix until line 108 in load_umap works (PR must be accepted)
+                if active_layer is not None:
+                    active_layer.opacity = 1  # Show when clusters are selected
+                    # Make non-selected labels (MANUAL_CLUSTER_ID = 0) transparent
+                    self._update_label_colors_with_transparent_background(active_layer)
 
         except Exception as e:
             print(e)
             pass
+
+    def _update_label_colors_with_transparent_background(self, layer):
+        """Update the label colormap to make non-selected labels transparent."""
+        try:
+            from napari.utils import DirectLabelColormap
+            
+            features = layer.features
+            if "MANUAL_CLUSTER_ID" not in features.columns:
+                return
+            if "label" not in features.columns:
+                return
+                    
+            cluster_ids = features["MANUAL_CLUSTER_ID"].values
+            label_values = features["label"].values
+            
+            # Build color dict: transparent for MANUAL_CLUSTER_ID=0, colored for others
+            color_dict = {0: np.array([0, 0, 0, 0])}  # Background always transparent
+            
+            for label_val, cluster_id in zip(label_values, cluster_ids):
+                label_int = int(label_val)
+                if cluster_id == 0:
+                    # Non-selected: transparent
+                    color_dict[label_int] = np.array([0, 0, 0, 0])
+                else:
+                    # Selected: use cluster color
+                    rgba = self.index_to_rgba(int(cluster_id))
+                    color_dict[label_int] = np.array([c / 255.0 for c in rgba])
+            
+            layer.colormap = DirectLabelColormap(color_dict=color_dict)
+            layer.refresh()
+        except Exception as e:
+            print(f"Error updating label colors: {e}")
+            import traceback
+            traceback.print_exc()
 
     def cleanup(self):
         if self.tmp_dir_path is None:
@@ -370,10 +545,13 @@ class ClusteringWidgetQt(QWidget):
             wsave.start()
 
     def _on_show_target_clicked(self):
-        emb_pth = self.plotter_widget.layer_select.value.metadata["tomotwin"][
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+        if active_layer is None:
+            return
+        emb_pth = active_layer.metadata["tomotwin"][
             "embeddings_path"
         ]
-        clusters = self.plotter_widget.layer_select.value.features[
+        clusters = active_layer.features[
             "MANUAL_CLUSTER_ID"
         ]
 
@@ -391,16 +569,13 @@ class ClusteringWidgetQt(QWidget):
     def show_targets_callback(self, future: futures.Future):
         points: pd.DataFrame = future.result()
         point_colors = []
-        colors = get_nice_colormap()
-        import PIL.ImageColor as ImageColor
 
         c = self._cluster_dropdown.currentData(Qt.UserRole)
 
-        rgba = [
-            float(v) / 255
-            for v in list(ImageColor.getcolor(colors[c % len(colors)], "RGB"))
-        ]
-        rgba.append(0.9)
+        # In napari-clusters-plotter 0.10+, use cat10_mod_cmap
+        # Get the color from the colormap for the given index
+        rgba = list(cat10_mod_cmap(c % 10))  # cat10 has 10 colors
+        rgba[3] = 0.9  # Set alpha
         point_colors.append(rgba)
 
         self.delete_points_layer()
@@ -454,16 +629,19 @@ class ClusteringWidgetQt(QWidget):
         self.tableWidget.itemChanged.connect(self._table_item_name_changed)
 
     def make_target(self, cluster_id):
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+        if active_layer is None:
+            return None
         embeddings_mask = (
-            self.plotter_widget.layer_select.value.features[
+            active_layer.features[
                 "MANUAL_CLUSTER_ID"
             ]
             == cluster_id
         )
-        embeddings_path = self.plotter_widget.layer_select.value.metadata[
+        embeddings_path = active_layer.metadata[
             "tomotwin"
         ]["embeddings_path"]
-        layer = self.plotter_widget.layer_select.value
+        layer = active_layer
         color = self.index_to_rgba(cluster_id)
         target = Target(
             embeddings_path, embeddings_mask, layer, cluster_id, color
@@ -471,6 +649,9 @@ class ClusteringWidgetQt(QWidget):
         return target
 
     def _on_add_candidate_clicked(self):
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+        if active_layer is None:
+            return
 
         c = self._cluster_dropdown.currentData(Qt.UserRole)
         target = self.make_target(c)
@@ -485,7 +666,7 @@ class ClusteringWidgetQt(QWidget):
         entry = [
             f"{target.target_id}",
             "",
-            self.plotter_widget.layer_select.value.name,
+            active_layer.name,
             target.target_name,
         ]
         for col, value in enumerate(entry):
@@ -501,6 +682,11 @@ class ClusteringWidgetQt(QWidget):
                 item.setFlags(item.flags() & ~Qt.ItemIsEditable)
 
             self.tableWidget.setItem(current_row_count, col, item)
+        
+        # Auto-increment the class spinbox to prepare for the next cluster selection
+        # This ensures the next cluster gets a different color
+        current_class = self.plotter_widget.plotting_widget.class_spinbox.value
+        self.plotter_widget.plotting_widget.class_spinbox.value = current_class + 1
 
     def napari_update_umap(self, umap_embeddings, used_embeddings):
 
@@ -525,29 +711,54 @@ class ClusteringWidgetQt(QWidget):
         (umap_embeddings, used_embeddings) = future.result()
         self.viewer.window._qt_window.setEnabled(True)
         self.napari_update_umap(umap_embeddings, used_embeddings)
+        self.progressbar.setHidden(True)
+        self.progressbar.set_label_text("Remap")
+        # Enable the Show Base UMAP button after remapping
+        if self.base_umap_features is not None:
+            self._show_base_umap.setEnabled(True)
+
+    def _on_show_base_umap_click(self):
+        """Restore the original base UMAP display."""
+        if self.base_umap_features is None:
+            notifications.show_info("Base UMAP data not available.")
+            return
+        
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+        if active_layer is None:
+            notifications.show_info("No layer selected.")
+            return
+        
+        # Restore the original features and metadata
+        active_layer.features = self.base_umap_features.copy()
+        active_layer.metadata["tomotwin"] = self.base_umap_metadata.copy()
+        
+        # Replot
+        self.replot_cluster_plotter()
+        self.update_all()
+        
+        # Disable the button and clear stored data
+        self._show_base_umap.setEnabled(False)
+        self.base_umap_features = None
+        self.base_umap_metadata = None
 
     @staticmethod
     def index_to_rgba(index: int) -> list[int]:
-        colors = get_nice_colormap()
-        import PIL.ImageColor as ImageColor
-
-        rgba = [
-            int(v)
-            for v in list(
-                ImageColor.getcolor(colors[index % len(colors)], "RGB")
-            )
-        ]
+        # In napari-clusters-plotter 0.10+, use cat10_mod_cmap
+        rgba_float = list(cat10_mod_cmap(index % 10))  # cat10 has 10 colors
+        rgba = [int(v * 255) for v in rgba_float[:3]]
         rgba.append(int(255 * 0.9))
         return rgba
 
     def update_all(self):
         cls = []
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
         if (
-            hasattr(self.plotter_widget.layer_select.value, "features")
+            active_layer is not None
+            and hasattr(active_layer, "features")
             and "MANUAL_CLUSTER_ID"
-            in self.plotter_widget.layer_select.value.features
+            in active_layer.features
         ):
-            cls = self.plotter_widget.layer_select.value.features[
+            cls = active_layer.features[
                 "MANUAL_CLUSTER_ID"
             ]
         self.update_items_cluster_dropdown(self._cluster_dropdown, cls)
@@ -557,7 +768,9 @@ class ClusteringWidgetQt(QWidget):
     ):
 
         dropdown.clear()
-        for c in np.unique(cluster_ids):
+        # Convert to numeric to handle categorical dtype from napari-clusters-plotter
+        unique_ids = np.unique(pd.to_numeric(cluster_ids, errors='coerce'))
+        for c in unique_ids:
 
             if c <= 0:
                 continue
@@ -583,12 +796,24 @@ class ClusteringWidgetQt(QWidget):
         return color_dropdown
 
     def reestimate_umap(self):
+        active_layer = self.plotter_widget.layers[0] if self.plotter_widget.layers else None
+        if active_layer is None:
+            notifications.show_info(f"No layer selected. Can't refine.")
+            return
+        
+        # Store the base UMAP features before remapping (only if not already stored)
+        if self.base_umap_features is None:
+            self.base_umap_features = active_layer.features.copy()
+            self.base_umap_metadata = active_layer.metadata["tomotwin"].copy()
+        
         try:
             print("Read clusters")
-            clusters = self.plotter_widget.layer_select.value.features[
+            clusters = active_layer.features[
                 "MANUAL_CLUSTER_ID"
             ]
-            if not np.any(clusters > 0):
+            # Convert to numeric to handle categorical dtype from napari-clusters-plotter
+            clusters_numeric = pd.to_numeric(clusters, errors='coerce')
+            if not np.any(clusters_numeric > 0):
                 raise KeyError
         except KeyError:
             notifications.show_info(f"No cluster selected. Can't refine.")
@@ -620,7 +845,7 @@ class ClusteringWidgetQt(QWidget):
 
         print("Read embeddings")
         emb_pth = get_embedding_path(
-            self.plotter_widget.layer_select.value.metadata["tomotwin"][
+            active_layer.metadata["tomotwin"][
                 "embeddings_path"
             ]
         )
@@ -629,18 +854,20 @@ class ClusteringWidgetQt(QWidget):
             print("No path selected.")
             return
 
-        self.plotter_widget.layer_select.value.metadata["tomotwin"][
+        active_layer.metadata["tomotwin"][
             "embeddings_path"
         ] = emb_pth
         embeddings = pd.read_pickle(emb_pth)
 
         self.progressbar.setHidden(False)
-        self.progressbar.set_label_text("Recalculate umap")
+        self.progressbar.set_label_text("Remap")
 
         # this workaround using signal is necessary, as "add_done_callback" starts the method
         # in a separate thread, but to change Qt elements, it must be run in the same thread as the main program.
         ppe = futures.ProcessPoolExecutor(max_workers=1)
         target_cluster = self._cluster_dropdown.currentData(Qt.UserRole)
-        f = ppe.submit(urefine.refine, clusters, embeddings, target_cluster)
+        umap_neighbors = self.get_umap_tool().get_umap_neighbors()
+        umap_metric = self.get_umap_tool().get_umap_metric()
+        f = ppe.submit(urefine.refine, clusters, embeddings, target_cluster, umap_neighbors, umap_metric)
         ppe.shutdown(wait=False)
         f.add_done_callback(self.refinement_done.emit)
